@@ -16,10 +16,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 			const { data: existingUser, error: error } = await supabase
 				.from("User")
 				.select("*")
-				.eq("email", email);
+				.eq("email", email)
+				.single();
 			// const { data: test, error: err } = await supabase.from("User").select("*");
 
-			// console.log("This is a test", test);
+			// console.log("This is a test", existingUser);
 
 			// If query fails with "No rows" that's okay — means not found
 			if (error && error.code != "PGRST116") {

@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { User } from "@/types";
 
-export default function Restricted(user: User) {
+export default function Restricted({ user }: { user: User }) {
 	return (
 		<div className="flex flex-1 items-center justify-center p-6">
-			<Card className="w-1.5 max-w-xl">
+			<Card className="w-full max-w-xl">
 				<CardHeader>
 					<CardTitle>User access restricted</CardTitle>
 					<CardDescription>

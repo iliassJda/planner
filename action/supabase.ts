@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 async function getAllowData(user: User) {
 	const { data, error } = await supabaseAdmin
 		.from("User")
-		.select("email, allowed")
+		.select("email, allowed, admin")
 		.eq("email", user.email)
 		.eq("allowed", true)
 		.maybeSingle(); // <-- IMPORTANT

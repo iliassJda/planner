@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { login } from "@/action/sign-in";
+import { login } from "@/action/authentication";
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
 	return (
