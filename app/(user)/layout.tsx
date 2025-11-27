@@ -5,6 +5,11 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/app-sidebar";
+import ToggleButton from "@/components/toggle-theme-button";
+// import { Button } from "@/components/ui/button";
+
+// import { Moon, Sun } from "lucide-react";
+// import { useTheme } from "next-themes";
 
 import UserProvider from "@/provider/user-provider";
 import React from "react";
@@ -19,6 +24,7 @@ export default async function RootLayout({
 	children: React.ReactNode;
 }>) {
 	const session = await auth();
+	// const { setTheme, theme } = useTheme();
 
 	if (!session) {
 		redirect("/login");
