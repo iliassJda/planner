@@ -8,6 +8,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 
 import UserProvider from "@/provider/user-provider";
 import React from "react";
+import Link from "next/link";
+
+import { getAllowData } from "@/action/supabase";
+import Restricted from "@/components/access-restricted";
 
 export default async function RootLayout({
 	children,
@@ -21,6 +25,15 @@ export default async function RootLayout({
 	}
 
 	const user = session.user as User;
+	// This gets the data to check whether the user is allowed on the website by checking the
+	// allowed column in supabase
+	const data = await getAllowData(user);
+
+	if (data == null) {
+		return Restricted(user);
+	}
+
+	//Check for admin !
 
 	return (
 		<SidebarProvider>
@@ -31,24 +44,9 @@ export default async function RootLayout({
 						<div className="flex items-center gap-2 px-3">
 							<SidebarTrigger />
 							<Separator orientation="vertical" className="mr-2 h-4" />
-							{/* <Breadcrumb>
-							<BreadcrumbList>
-								<BreadcrumbItem className="hidden md:block">
-									<BreadcrumbLink href="#">Building Your Application</BreadcrumbLink>
-								</BreadcrumbItem>
-								<BreadcrumbSeparator className="hidden md:block" />
-								<BreadcrumbItem>
-									<BreadcrumbPage>Data Fetching</BreadcrumbPage>
-								</BreadcrumbItem>
-							</BreadcrumbList>
-						</Breadcrumb> */}
 						</div>
 					</header>
-					<div className="flex flex-1 flex-col gap-4 p-4">
-						{/* {React.cloneElement(children as React.ReactElement<{ user?: User }>, { user })} */}
-						{/* <UserProvider user={user}>{children}</UserProvider> */}
-						{children}
-					</div>
+					<div className="flex flex-1 flex-col gap-4 p-4">{children}</div>
 				</SidebarInset>
 			</UserProvider>
 		</SidebarProvider>
