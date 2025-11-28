@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { NavUser } from "./nav-user";
+import Content from "./sidebar-content";
 
 // The data for the sidebar comes from here
-import { data } from "@/lib/sidebar_data";
+// import { userData } from "@/lib/sidebar_data";
 import { useUser } from "@/context/user-context";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -44,32 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					</SidebarMenuItem>
 				</SidebarMenu>
 			</SidebarHeader>
-			<SidebarContent>
-				<SidebarGroup>
-					<SidebarMenu>
-						{data.navMain.map((item) => (
-							<SidebarMenuItem key={item.title}>
-								<SidebarMenuButton asChild>
-									<a href={item.url} className="font-medium">
-										{item.title}
-									</a>
-								</SidebarMenuButton>
-								{/* {item.items?.length ? (
-									<SidebarMenuSub>
-										{item.items.map((item) => (
-											<SidebarMenuSubItem key={item.title}>
-												<SidebarMenuSubButton asChild isActive={item.isActive}>
-													<a href={item.url}>{item.title}</a>
-												</SidebarMenuSubButton>
-											</SidebarMenuSubItem>
-										))}
-									</SidebarMenuSub>
-								) : null} */}
-							</SidebarMenuItem>
-						))}
-					</SidebarMenu>
-				</SidebarGroup>
-			</SidebarContent>
+			<Content admin={user.admin} />
 			<SidebarFooter>
 				<NavUser user={user} />
 			</SidebarFooter>

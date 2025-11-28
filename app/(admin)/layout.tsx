@@ -13,7 +13,7 @@ import ToggleButton from "@/components/toggle-theme-button";
 
 import UserProvider from "@/provider/user-provider";
 import React from "react";
-import Link from "next/link";
+// import Link from "next/link";
 
 import { getAllowData } from "@/action/supabase";
 import Restricted from "@/components/access-restricted";
@@ -30,24 +30,26 @@ export default async function RootLayout({
 		redirect("/login");
 	}
 
-	// const user = session.user as User;
 	const user: User = {
 		email: session.user.email as string,
 		name: session.user.name as string,
 		image: session.user.image as string,
 		admin: false,
 	};
+	// console.log(user);
 	// This gets the data to check whether the user is allowed on the website by checking the
 	// allowed column in supabase
 	const data = await getAllowData(user);
 
-	if (data == null) {
+	if (data == null || !data.admin) {
 		return Restricted({ user });
 	}
 
-	if (data.admin) {
-		redirect("/admin");
-	}
+	user.admin = true;
+
+	// if (!data.admin) {
+	// 	redirect("/");
+	// }
 
 	//Check for admin !
 
