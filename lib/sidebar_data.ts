@@ -10,8 +10,8 @@ const userData = {
 const adminData = {
 	navMain: [
 		{
-			title: "Admin thing 1",
-			url: "/admin/thing1",
+			title: "Set Weeks",
+			url: "/admin/set-weeks",
 		},
 		{
 			title: "Admin thing 2",

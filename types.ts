@@ -5,4 +5,13 @@ type User = {
 	admin: boolean;
 };
 
-export type { User };
+type Week = {
+	id: string;
+	week_number: number;
+	year: number;
+	week_label: string;
+	is_active: boolean;
+	// created_at: string;
+};
+
+export type { User, Week };

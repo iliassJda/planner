@@ -13,7 +13,7 @@ import ToggleButton from "@/components/toggle-theme-button";
 
 import UserProvider from "@/provider/user-provider";
 import React from "react";
-import Link from "next/link";
+// import Link from "next/link";
 
 import { getAllowData } from "@/action/supabase";
 import Restricted from "@/components/access-restricted";
