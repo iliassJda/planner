@@ -14,4 +14,18 @@ type Week = {
 	// created_at: string;
 };
 
-export type { User, Week };
+type Availability = {
+	id?: string;
+	user_email: string;
+	week_id: string;
+	monday: boolean;
+	tuesday: boolean;
+	wednesday: boolean;
+	thursday: boolean;
+	friday: boolean;
+	saturday: boolean;
+	sunday: boolean;
+	submitted_at?: string;
+};
+
+export type { User, Week, Availability };
