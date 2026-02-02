@@ -14,18 +14,20 @@ type Week = {
 	// created_at: string;
 };
 
+type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";
+
 type Availability = {
 	id?: string;
 	user_email: string;
 	week_id: string;
-	monday: boolean;
-	tuesday: boolean;
-	wednesday: boolean;
-	thursday: boolean;
-	friday: boolean;
-	saturday: boolean;
-	sunday: boolean;
+	monday: DayAvailability;
+	tuesday: DayAvailability;
+	wednesday: DayAvailability;
+	thursday: DayAvailability;
+	friday: DayAvailability;
+	saturday: DayAvailability;
+	sunday: DayAvailability;
 	submitted_at?: string;
 };
 
-export type { User, Week, Availability };
+export type { User, Week, Availability, DayAvailability };

@@ -73,7 +73,7 @@ export default function AdminPage() {
 		async function fetchData() {
 			const count = await getTotalStudents();
 			const weeks = await getAllWeeks();
-			console.log("Fetched weeks:", weeks);
+			// console.log("Fetched weeks:", weeks);
 			setTotalStudents(count);
 			setWeeks(weeks);
 			setLoading(false);
