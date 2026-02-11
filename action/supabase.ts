@@ -1,6 +1,6 @@
 "use server";
 
-import { User, Week } from "@/types";
+import { Availability, User, Week } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
 async function getAllowData(user: User) {
@@ -17,6 +17,17 @@ async function getAllowData(user: User) {
 	}
 
 	return data; // returns: { email: string, allowed: boolean } | null
+}
+
+async function getAllUsers() {
+	const { data, error } = await supabaseAdmin.from("User").select("*");
+
+	if (error) {
+		console.error("Error fetching users:", error);
+		return [];
+	}
+
+	return data as User[];
 }
 
 async function getTotalStudents() {
@@ -91,4 +102,59 @@ async function upsertWeeks(weeks: Omit<Week, "is_active">[]) {
 	return data as Week[];
 }
 
-export { getAllowData, getTotalStudents, getAllWeeks, insertWeeks, upsertWeeks };
+async function insertAvailability(availability: Availability) {
+	const { data, error } = await supabaseAdmin.from("Availability").insert(availability).select();
+
+	if (error) {
+		console.error("Error inserting availability:", error);
+		return null;
+	}
+
+	// console.log("Inserted availability:", data);
+	return data as Availability[];
+}
+
+async function getAvailabilityByEmail(email: string) {
+	const { data, error } = await supabaseAdmin.from("Availability").select("*").eq("email", email);
+
+	if (error) {
+		console.error("Error fetching availability by email:", error);
+		return [];
+	}
+	console.log("Fetched availability for email:", email, data);
+	return data as Availability[];
+}
+
+async function deleteWeek(weekId: string) {
+	// First delete all availability records for this week
+	const { error: availabilityError } = await supabaseAdmin
+		.from("Availability")
+		.delete()
+		.eq("week_id", weekId);
+
+	if (availabilityError) {
+		console.error("Error deleting availability records:", availabilityError);
+		return null;
+	}
+
+	// Then delete the week itself
+	const { data, error } = await supabaseAdmin.from("Week").delete().eq("id", weekId).select();
+
+	if (error) {
+		console.error("Error deleting week:", error);
+		return null;
+	}
+
+	return data as Week[];
+}
+
+export {
+	getAllowData,
+	getTotalStudents,
+	getAllWeeks,
+	insertWeeks,
+	upsertWeeks,
+	insertAvailability,
+	getAvailabilityByEmail,
+	deleteWeek,
+};

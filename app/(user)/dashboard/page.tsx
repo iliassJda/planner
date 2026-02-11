@@ -11,6 +11,8 @@ import {
 	Sunset,
 	Calendar as CalendarIcon,
 	X,
+	ChevronDown,
+	ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,9 +28,10 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Week, Availability, DayAvailability } from "@/types";
-import AdminSkeleton from "@/components/admin-skeleton";
+// import AdminSkeleton from "@/components/admin-skeleton";
 import UserSkeleton from "@/components/user-skeleton";
-import { getAllWeeks } from "@/action/supabase";
+import { getAllWeeks, insertAvailability, getAvailabilityByEmail } from "@/action/supabase";
+import { useRouter } from "next/navigation";
 
 // Mock data - Replace with actual data fetching
 // const mockActiveWeeks: Week[] = [
@@ -59,7 +62,7 @@ const AVAILABILITY_OPTIONS = [
 	},
 	{
 		value: "morning" as const,
-		label: "Morning (9AM-1PM)",
+		label: "Morning",
 		icon: Sun,
 		color: "text-amber-600",
 		bg: "bg-amber-50 dark:bg-amber-950/30",
@@ -67,7 +70,7 @@ const AVAILABILITY_OPTIONS = [
 	},
 	{
 		value: "afternoon" as const,
-		label: "Afternoon (1PM-6PM)",
+		label: "Afternoon",
 		icon: Sunset,
 		color: "text-orange-600",
 		bg: "bg-orange-50 dark:bg-orange-950/30",
@@ -75,7 +78,7 @@ const AVAILABILITY_OPTIONS = [
 	},
 	{
 		value: "whole_day" as const,
-		label: "Whole Day (9AM-6PM)",
+		label: "Whole Day",
 		icon: CalendarIcon,
 		color: "text-green-600",
 		bg: "bg-green-50 dark:bg-green-950/30",
@@ -85,25 +88,32 @@ const AVAILABILITY_OPTIONS = [
 
 export default function Dashboard() {
 	const user = useUser();
+	const router = useRouter();
 	const [availabilities, setAvailabilities] = useState<
 		Record<string, Record<string, DayAvailability>>
 	>({});
 	const [activeWeeks, setActiveWeeks] = useState<Week[]>([]);
 	const [submittedWeeks, setSubmittedWeeks] = useState<Set<string>>(new Set());
+	const [currentAvailability, setCurrentAvailability] = useState<Availability[]>([]);
 	const [submitting, setSubmitting] = useState<string | null>(null);
 	const [editingWeek, setEditingWeek] = useState<string | null>(null);
+	const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
 	const [loading, setLoading] = useState(true);
 
+	const fetchData = async () => {
+		const availabilityData = await getAvailabilityByEmail(user?.email || "");
+		const activeWeeksData: Week[] = (await getAllWeeks())
+			.filter((week) => !availabilityData.some((a) => a.week_id === week.id))
+			.sort((a, b) => a.week_number - b.week_number);
+
+		setCurrentAvailability(availabilityData);
+		setActiveWeeks(activeWeeksData);
+		setLoading(false);
+	};
+
 	useEffect(() => {
-		async function fetchData() {
-			const activeWeeksData: Week[] = (await getAllWeeks()).sort(
-				(a, b) => a.week_number - b.week_number,
-			);
-			setActiveWeeks(activeWeeksData);
-			setLoading(false);
-		}
 		fetchData();
-	}, []);
+	}, [user?.email]);
 
 	const getInitials = (name: string) => {
 		return name
@@ -143,8 +153,9 @@ export default function Dashboard() {
 			const weekAvailability = availabilities[weekId] || {};
 			console.log("Week Availability:", weekAvailability);
 			const availability: Availability = {
-				user_email: user?.email || "",
+				email: user?.email || "",
 				week_id: weekId,
+				week_number: parseInt(weekId.split("-")[1], 10),
 				monday: weekAvailability.monday || "not_available",
 				tuesday: weekAvailability.tuesday || "not_available",
 				wednesday: weekAvailability.wednesday || "not_available",
@@ -154,9 +165,10 @@ export default function Dashboard() {
 				sunday: weekAvailability.sunday || "not_available",
 			};
 
-			// TODO: Save to Supabase
-			console.log("Submitting availability:", availability);
-			await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API call
+			await insertAvailability(availability);
+
+			// Refetch data to update both completed and active weeks
+			await fetchData();
 
 			setSubmittedWeeks((prev) => new Set([...prev, weekId]));
 			toast.success(`Availability submitted for Week ${weekId.split("-")[1]}`);
@@ -170,6 +182,12 @@ export default function Dashboard() {
 
 	const getSelectedDaysCount = (weekId: string) => {
 		const weekAvailability = availabilities[weekId] || {};
+		// console.log(
+		// 	"Calculating selected days for weekId:",
+		// 	weekId,
+		// 	"with availability:",
+		// 	availabilities,
+		// );
 		return Object.values(weekAvailability).filter(
 			(availability) => availability !== "not_available",
 		).length;
@@ -192,8 +210,27 @@ export default function Dashboard() {
 		return summary;
 	};
 
+	const toggleWeekExpansion = (weekId: string) => {
+		setExpandedWeeks((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(weekId)) {
+				newSet.delete(weekId);
+			} else {
+				newSet.add(weekId);
+			}
+			return newSet;
+		});
+	};
+
+	const getSubmittedWeekAvailabilityCount = (week: Availability) => {
+		return DAYS.filter((day) => week[day] !== "not_available").length;
+	};
+
 	const pendingWeeks = activeWeeks.filter((w) => !submittedWeeks.has(w.id));
-	const completedWeeks = activeWeeks.filter((w) => submittedWeeks.has(w.id));
+	// const completedWeeks = activeWeeks.filter((w) => submittedWeeks.has(w.id));
+	const completedWeeks = currentAvailability;
+	// const completedWeeks =
+	console.log("Completed Weeks:", completedWeeks);
 
 	if (loading) {
 		return <UserSkeleton />;
@@ -253,7 +290,7 @@ export default function Dashboard() {
 							<CalendarDays className="h-6 w-6" />
 						</div>
 						<div>
-							<p className="text-2xl font-bold">{activeWeeks.length}</p>
+							<p className="text-2xl font-bold">{activeWeeks.length + completedWeeks.length}</p>
 							<p className="text-sm text-muted-foreground">Total requests</p>
 						</div>
 					</CardContent>
@@ -278,7 +315,7 @@ export default function Dashboard() {
 					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 						{pendingWeeks.map((week) => (
 							<Card key={week.id} className="overflow-hidden">
-								<CardHeader className="bg-muted/50">
+								<CardHeader className="">
 									<CardTitle className="flex items-center gap-2">
 										<Calendar className="h-5 w-5 text-primary" />
 										Week {week.week_number}
@@ -294,7 +331,7 @@ export default function Dashboard() {
 										<div className="rounded-lg border bg-muted/30 p-4">
 											<div className="flex items-center justify-between mb-3">
 												<h4 className="font-medium">Current Availability</h4>
-												<Dialog
+												{/* <Dialog
 													open={editingWeek === week.id}
 													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
 												>
@@ -311,9 +348,9 @@ export default function Dashboard() {
 															</DialogDescription>
 														</DialogHeader>
 													</DialogContent>
-												</Dialog>
+												</Dialog> */}
 
-												{/* <Dialog
+												<Dialog
 													open={editingWeek === week.id}
 													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
 												>
@@ -387,12 +424,12 @@ export default function Dashboard() {
 															})}
 														</div>
 													</DialogContent>
-												</Dialog> */}
+												</Dialog>
 											</div>
-											{/* {(() => {
+											{(() => {
 												const summary = getAvailabilitySummary(week.id);
 												return (
-													<div className="grid grid-cols-2 gap-2 text-sm">
+													<div className="grid grid-cols-1 gap-2 text-sm">
 														{summary.morning > 0 && (
 															<div className="flex items-center gap-2">
 																<Sun className="h-4 w-4 text-amber-600" />
@@ -418,14 +455,14 @@ export default function Dashboard() {
 															</div>
 														)}
 														{getSelectedDaysCount(week.id) === 0 && (
-															<div className="flex items-center gap-2 col-span-2">
+															<div className="flex items-center gap-2 col-span-3">
 																<X className="h-4 w-4 text-muted-foreground" />
 																<span className="text-muted-foreground">No availability set</span>
 															</div>
 														)}
 													</div>
 												);
-											})()} */}
+											})()}
 										</div>
 									</div>
 									<div className="mt-4 flex items-center justify-between">
@@ -458,30 +495,92 @@ export default function Dashboard() {
 			{completedWeeks.length > 0 && (
 				<div>
 					<h2 className="mb-4 text-xl font-semibold">Submitted Availability</h2>
-					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-						{completedWeeks.map((week) => (
-							<Card
-								key={week.id}
-								className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10"
-							>
-								<CardContent className="flex items-center justify-between pt-6">
-									<div className="flex items-center gap-3">
-										<div className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600 ">
-											<CheckCircle2 className="h-5 w-5" />
-										</div>
-										<div>
-											<p className="font-medium">Week {week.week_number}</p>
-											<p className="text-sm text-muted-foreground">
-												{getSelectedDaysCount(week.id)} days available
-											</p>
-										</div>
-									</div>
-									<span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-										Submitted
-									</span>
-								</CardContent>
-							</Card>
-						))}
+					<div className="grid gap-4">
+						{completedWeeks
+							.sort((a, b) => a.week_number - b.week_number)
+							.map((week) => {
+								const isExpanded = expandedWeeks.has(week.week_id);
+								const availableDaysCount = getSubmittedWeekAvailabilityCount(week);
+
+								return (
+									<Card
+										key={week.week_id}
+										className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10 hover:bg-green-100/50 dark:hover:bg-green-900/20 transition-colors"
+									>
+										<CardContent className="p-0">
+											<button
+												onClick={() => toggleWeekExpansion(week.week_id)}
+												className="w-full p-6 text-left  rounded-lg"
+											>
+												<div className="flex items-center justify-between">
+													<div className="flex items-center gap-3">
+														<div className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600">
+															<CheckCircle2 className="h-5 w-5" />
+														</div>
+														<div>
+															<p className="font-medium text-lg">Week {week.week_number}</p>
+															<p className="text-sm text-muted-foreground">
+																{availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
+																available
+															</p>
+														</div>
+													</div>
+													<div className="flex items-center gap-3">
+														<span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+															Submitted
+														</span>
+														{isExpanded ? (
+															<ChevronUp className="h-5 w-5 text-muted-foreground" />
+														) : (
+															<ChevronDown className="h-5 w-5 text-muted-foreground" />
+														)}
+													</div>
+												</div>
+											</button>
+
+											{isExpanded && (
+												<div className="px-6 pb-6 border-t border-green-200 dark:border-green-800">
+													<div className="pt-4">
+														<h4 className="font-medium mb-3 text-muted-foreground text-sm">
+															Weekly Schedule
+														</h4>
+														<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+															{DAYS.map((day, index) => {
+																const availability = week[day];
+																const option = AVAILABILITY_OPTIONS.find(
+																	(opt) => opt.value === availability,
+																);
+																const Icon = option?.icon || X;
+
+																return (
+																	<div key={day} className="rounded-lg border bg-card/50 p-3">
+																		<div className="text-xs font-medium text-muted-foreground mb-1">
+																			{DAY_LABELS[index]}
+																		</div>
+																		<div
+																			className={cn(
+																				"flex items-center gap-2",
+																				option?.color || "text-muted-foreground",
+																			)}
+																		>
+																			<Icon className="h-4 w-4 flex-shrink-0" />
+																			<span className="text-sm font-medium truncate">
+																				{option?.label === "Not Available"
+																					? "N/A"
+																					: option?.label || "N/A"}
+																			</span>
+																		</div>
+																	</div>
+																);
+															})}
+														</div>
+													</div>
+												</div>
+											)}
+										</CardContent>
+									</Card>
+								);
+							})}
 					</div>
 				</div>
 			)}

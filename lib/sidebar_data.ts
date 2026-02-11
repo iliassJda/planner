@@ -10,13 +10,13 @@ const userData = {
 const adminData = {
 	navMain: [
 		{
-			title: "Set Weeks",
-			url: "/admin/set-weeks",
+			title: "All users",
+			url: "/admin/all-users",
 		},
-		{
-			title: "Admin thing 2",
-			url: "/admin/thing2",
-		},
+		// {
+		// 	title: "Admin thing 2",
+		// 	url: "/admin/thing2",
+		// },
 	],
 };
 

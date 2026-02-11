@@ -2,13 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar, Users, Check, X, Save, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { Week } from "@/types";
 
-import { getAllWeeks, getTotalStudents, upsertWeeks } from "@/action/supabase";
+import { getAllWeeks, getTotalStudents, upsertWeeks, deleteWeek } from "@/action/supabase";
 import AdminSkeleton from "@/components/admin-skeleton";
 
 // Get the current week number and year
@@ -68,16 +76,20 @@ export default function AdminPage() {
 	const [loading, setLoading] = useState(true);
 	const [totalStudents, setTotalStudents] = useState<number | null>(null);
 	const [weeks, setWeeks] = useState<Week[]>([]);
+	const [deletingWeek, setDeletingWeek] = useState<string | null>(null);
+	const [confirmDeleteWeek, setConfirmDeleteWeek] = useState<{ id: string; number: number } | null>(
+		null,
+	);
+
+	const fetchData = async () => {
+		const count = await getTotalStudents();
+		const weeks = await getAllWeeks();
+		setTotalStudents(count);
+		setWeeks(weeks);
+		setLoading(false);
+	};
 
 	useEffect(() => {
-		async function fetchData() {
-			const count = await getTotalStudents();
-			const weeks = await getAllWeeks();
-			// console.log("Fetched weeks:", weeks);
-			setTotalStudents(count);
-			setWeeks(weeks);
-			setLoading(false);
-		}
 		fetchData();
 	}, []);
 
@@ -117,8 +129,9 @@ export default function AdminPage() {
 			if (result) {
 				toast.success(`${selectedWeeks.size} weeks activated for availability collection`);
 				// Refresh the weeks list
-				const updatedWeeks = await getAllWeeks();
-				setWeeks(updatedWeeks);
+				await fetchData();
+				// Clear selection
+				setSelectedWeeks(new Set());
 			} else {
 				toast.error("Failed to save week selection");
 			}
@@ -127,6 +140,31 @@ export default function AdminPage() {
 			toast.error("Failed to save week selection");
 		} finally {
 			setSaving(false);
+		}
+	}
+
+	function handleDeleteWeekClick(weekId: string, weekNumber: number) {
+		setConfirmDeleteWeek({ id: weekId, number: weekNumber });
+	}
+
+	async function handleConfirmDelete() {
+		if (!confirmDeleteWeek) return;
+
+		setDeletingWeek(confirmDeleteWeek.id);
+		setConfirmDeleteWeek(null);
+		try {
+			const result = await deleteWeek(confirmDeleteWeek.id);
+			if (result) {
+				toast.success(`Week ${confirmDeleteWeek.number} removed successfully`);
+				await fetchData();
+			} else {
+				toast.error("Failed to remove week");
+			}
+		} catch (error) {
+			console.error("Error deleting week:", error);
+			toast.error("Failed to remove week");
+		} finally {
+			setDeletingWeek(null);
 		}
 	}
 
@@ -150,8 +188,8 @@ export default function AdminPage() {
 							<CalendarDays className="h-6 w-6" />
 						</div>
 						<div>
-							<p className="text-2xl font-bold">{selectedWeeks.size}</p>
-							<p className="text-sm text-muted-foreground">Weeks selected</p>
+							<p className="text-2xl font-bold">{weeks.length}</p>
+							<p className="text-sm text-muted-foreground">Active weeks</p>
 						</div>
 					</CardContent>
 				</Card>
@@ -271,6 +309,89 @@ export default function AdminPage() {
 					)}
 				</CardContent>
 			</Card>
+
+			{weeks.length > 0 && (
+				<div>
+					<h2 className="mb-4 text-xl font-semibold">Active Weeks</h2>
+					<div className="grid gap-4">
+						{weeks
+							.sort((a, b) => a.week_number - b.week_number)
+							.map((week) => {
+								return (
+									<Card
+										key={week.id}
+										className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-900/10 transition-colors"
+									>
+										<CardContent className="p-6">
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-3">
+													<div className="rounded-full bg-blue-100 dark:bg-blue-900 p-2 text-blue-600 dark:text-blue-400">
+														<Calendar className="h-5 w-5" />
+													</div>
+													<div>
+														<p className="font-medium text-lg">Week {week.week_number}</p>
+														<p className="text-sm text-muted-foreground">
+															{getWeekDateRange(week.week_number, week.year)} • Year {week.year}
+														</p>
+													</div>
+												</div>
+												<div className="flex items-center gap-3">
+													<span className="rounded-full bg-blue-100 dark:bg-blue-900 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-400">
+														Active
+													</span>
+													<Button
+														variant="outline"
+														size="sm"
+														className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:border-red-800 dark:hover:bg-red-900/20"
+														onClick={() => handleDeleteWeekClick(week.id, week.week_number)}
+														disabled={deletingWeek === week.id}
+													>
+														{deletingWeek === week.id ? (
+															"Removing..."
+														) : (
+															<>
+																<X className="mr-2 h-4 w-4" />
+																Remove
+															</>
+														)}
+													</Button>
+												</div>
+											</div>
+										</CardContent>
+									</Card>
+								);
+							})}
+					</div>
+				</div>
+			)}
+
+			{/* Confirmation Dialog */}
+			<Dialog open={!!confirmDeleteWeek} onOpenChange={() => setConfirmDeleteWeek(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Confirm Week Removal</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to remove Week {confirmDeleteWeek?.number}? This action will:
+						</DialogDescription>
+						<DialogDescription>
+							{/* Are you sure you want to remove Week {confirmDeleteWeek?.number}? This action will: */}
+							<ul className="list-disc list-inside mt-2 ml-2 space-y-1">
+								<li>Remove the week from availability collection</li>
+								<li>Delete all student submissions for this week</li>
+								<li>This action cannot be undone</li>
+							</ul>
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setConfirmDeleteWeek(null)}>
+							Cancel
+						</Button>
+						<Button variant="destructive" onClick={handleConfirmDelete} disabled={!!deletingWeek}>
+							{deletingWeek ? "Removing..." : "Remove Week"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
