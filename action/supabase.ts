@@ -27,6 +27,8 @@ async function getAllUsers() {
 		return [];
 	}
 
+	// console.log("Fetched users:", data);
+
 	return data as User[];
 }
 
@@ -148,6 +150,50 @@ async function deleteWeek(weekId: string) {
 	return data as Week[];
 }
 
+async function updateUserPermissions(email: string, admin: boolean) {
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.update({ admin })
+		.eq("email", email)
+		.select();
+
+	if (error) {
+		console.error("Error updating user permissions:", error);
+		return null;
+	}
+
+	return data as User[];
+}
+
+async function updateUserStatus(email: string, allowed: boolean) {
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.update({ allowed })
+		.eq("email", email)
+		.select();
+
+	if (error) {
+		console.error("Error updating user status:", error);
+		return null;
+	}
+
+	return data as User[];
+}
+
+async function getAllAvailability() {
+	const { data, error } = await supabaseAdmin
+		.from("Availability")
+		.select("*")
+		.order("week_number", { ascending: true });
+
+	if (error) {
+		console.error("Error fetching all availability:", error);
+		return [];
+	}
+
+	return data as Availability[];
+}
+
 export {
 	getAllowData,
 	getTotalStudents,
@@ -157,4 +203,8 @@ export {
 	insertAvailability,
 	getAvailabilityByEmail,
 	deleteWeek,
+	getAllUsers,
+	updateUserPermissions,
+	updateUserStatus,
+	getAllAvailability,
 };

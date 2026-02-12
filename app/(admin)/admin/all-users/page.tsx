@@ -1,8 +1,403 @@
-export default function UserPage() {
+"use client";
+
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
+	Users,
+	UserCheck,
+	UserX,
+	Shield,
+	ShieldCheck,
+	Crown,
+	CheckCircle,
+	XCircle,
+	MoreHorizontal,
+} from "lucide-react";
+import { toast } from "sonner";
+import { User } from "@/types";
+import { getAllUsers, updateUserPermissions, updateUserStatus } from "@/action/supabase";
+import UserSkeleton from "@/components/user-skeleton";
+
+import { getInitials } from "@/help_functions";
+
+export default function AllUsersPage() {
+	const [users, setUsers] = useState<User[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+	const [confirmAction, setConfirmAction] = useState<{
+		user: User;
+		action: "accept" | "reject" | "makeAdmin" | "removeAdmin";
+	} | null>(null);
+
+	const fetchUsers = async () => {
+		const userData = await getAllUsers();
+		setUsers(userData);
+		setLoading(false);
+	};
+
+	useEffect(() => {
+		fetchUsers();
+	}, []);
+
+	const handleUpdateUserStatus = async (email: string, allowed: boolean) => {
+		setUpdatingUser(email);
+		try {
+			const result = await updateUserStatus(email, allowed);
+			if (result) {
+				toast.success(`User ${allowed ? "accepted" : "rejected"} successfully`);
+				await fetchUsers();
+			} else {
+				toast.error("Failed to update user status");
+			}
+		} catch (error) {
+			console.error("Error updating user status:", error);
+			toast.error("Failed to update user status");
+		} finally {
+			setUpdatingUser(null);
+		}
+	};
+
+	const handleUpdateUserPermissions = async (email: string, admin: boolean) => {
+		setUpdatingUser(email);
+		try {
+			const result = await updateUserPermissions(email, admin);
+			if (result) {
+				toast.success(`User ${admin ? "promoted to" : "removed from"} admin successfully`);
+				await fetchUsers();
+			} else {
+				toast.error("Failed to update user permissions");
+			}
+		} catch (error) {
+			console.error("Error updating user permissions:", error);
+			toast.error("Failed to update user permissions");
+		} finally {
+			setUpdatingUser(null);
+		}
+	};
+
+	const handleConfirmAction = async () => {
+		if (!confirmAction) return;
+
+		const { user, action } = confirmAction;
+		setConfirmAction(null);
+
+		switch (action) {
+			case "accept":
+				await handleUpdateUserStatus(user.email, true);
+				break;
+			case "reject":
+				await handleUpdateUserStatus(user.email, false);
+				break;
+			case "makeAdmin":
+				await handleUpdateUserPermissions(user.email, true);
+				break;
+			case "removeAdmin":
+				await handleUpdateUserPermissions(user.email, false);
+				break;
+		}
+	};
+
+	const getActionText = (action: string) => {
+		switch (action) {
+			case "accept":
+				return "accept";
+			case "reject":
+				return "reject";
+			case "makeAdmin":
+				return "promote to admin";
+			case "removeAdmin":
+				return "remove admin privileges from";
+			default:
+				return "";
+		}
+	};
+
+	const pendingUsers = users.filter((user) => !user.allowed);
+	const activeUsers = users.filter((user) => user.allowed);
+	const adminUsers = activeUsers.filter((user) => user.admin);
+	const regularUsers = activeUsers.filter((user) => !user.admin);
+
+	if (loading) {
+		return <UserSkeleton />;
+	}
+
 	return (
-		<div className="p-4">
-			<h1 className="text-2xl font-bold mb-4">User Page</h1>
-			<p>Welcome to the user page!</p>
+		<div className="flex flex-col gap-6 p-6">
+			{/* Header */}
+			<div>
+				<h1 className="text-2xl font-bold md:text-3xl">User Management</h1>
+				<p className="text-muted-foreground">
+					Manage user permissions and access to the application
+				</p>
+			</div>
+
+			{/* Stats Cards */}
+			<div className="grid gap-4 sm:grid-cols-4">
+				<Card>
+					<CardContent className="flex items-center gap-4 pt-6">
+						<div className="rounded-lg p-3">
+							<Users className="h-6 w-6" />
+						</div>
+						<div>
+							<p className="text-2xl font-bold">{users.length}</p>
+							<p className="text-sm text-muted-foreground">Total users</p>
+						</div>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardContent className="flex items-center gap-4 pt-6">
+						<div className="rounded-lg p-3 text-green-600 dark:bg-green-950/30 dark:text-green-400">
+							<UserCheck className="h-6 w-6" />
+						</div>
+						<div>
+							<p className="text-2xl font-bold">{activeUsers.length}</p>
+							<p className="text-sm text-muted-foreground">Active users</p>
+						</div>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardContent className="flex items-center gap-4 pt-6">
+						<div className="rounded-lg p-3 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
+							<UserX className="h-6 w-6" />
+						</div>
+						<div>
+							<p className="text-2xl font-bold">{pendingUsers.length}</p>
+							<p className="text-sm text-muted-foreground">Pending approval</p>
+						</div>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardContent className="flex items-center gap-4 pt-6">
+						<div className="rounded-lg p-3 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
+							<Crown className="h-6 w-6" />
+						</div>
+						<div>
+							<p className="text-2xl font-bold">{adminUsers.length}</p>
+							<p className="text-sm text-muted-foreground">Administrators</p>
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+
+			{/* Pending Users */}
+			{pendingUsers.length > 0 && (
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<UserX className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+							Pending Approval ({pendingUsers.length})
+						</CardTitle>
+						<CardDescription>Users waiting for access approval</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						{pendingUsers.map((user) => (
+							<div
+								key={user.email}
+								className="flex items-center justify-between rounded-lg border p-4"
+							>
+								<div className="flex items-center gap-3">
+									<Avatar className="h-10 w-10">
+										<AvatarImage src={user.image} alt={user.first_name} />
+										<AvatarFallback>{getInitials(user.first_name)}</AvatarFallback>
+									</Avatar>
+									<div>
+										<p className="font-medium">{user.first_name}</p>
+										<p className="text-sm text-muted-foreground">{user.email}</p>
+									</div>
+								</div>
+								<div className="flex items-center gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										className="text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+										onClick={() => setConfirmAction({ user, action: "accept" })}
+										disabled={updatingUser === user.email}
+									>
+										{updatingUser === user.email ? (
+											"Processing..."
+										) : (
+											<>
+												<CheckCircle className="mr-2 h-4 w-4" />
+												Accept
+											</>
+										)}
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+										onClick={() => setConfirmAction({ user, action: "reject" })}
+										disabled={updatingUser === user.email}
+									>
+										<XCircle className="mr-2 h-4 w-4" />
+										Reject
+									</Button>
+								</div>
+							</div>
+						))}
+					</CardContent>
+				</Card>
+			)}
+
+			{/* Active Users */}
+			<div className="grid gap-6 lg:grid-cols-2">
+				{/* Administrators */}
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<Crown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+							Administrators ({adminUsers.length})
+						</CardTitle>
+						<CardDescription>Users with administrative privileges</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						{adminUsers.length === 0 ? (
+							<p className="text-sm text-muted-foreground">No administrators found</p>
+						) : (
+							adminUsers.map((user) => (
+								<div
+									key={user.email}
+									className="flex items-center justify-between rounded-lg border p-4"
+								>
+									<div className="flex items-center gap-3">
+										<Avatar className="h-10 w-10">
+											<AvatarImage src={user.image} alt={user.first_name} />
+											<AvatarFallback>{getInitials(user.first_name)}</AvatarFallback>
+										</Avatar>
+										<div>
+											<div className="flex items-center gap-2">
+												<p className="font-medium">{user.first_name}</p>
+												{/* <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" /> */}
+											</div>
+											<p className="text-sm text-muted-foreground">{user.email}</p>
+										</div>
+									</div>
+									<Button
+										variant="outline"
+										size="sm"
+										className="text-orange-600 hover:text-orange-700  hover:bg-orange-50 dark:text-orange-400  dark:hover:bg-orange-900/20"
+										onClick={() => setConfirmAction({ user, action: "removeAdmin" })}
+										disabled={updatingUser === user.email}
+									>
+										{updatingUser === user.email ? (
+											"Processing..."
+										) : (
+											<>
+												<UserX className="mr-2 h-4 w-4" />
+												Remove Admin
+											</>
+										)}
+									</Button>
+								</div>
+							))
+						)}
+					</CardContent>
+				</Card>
+
+				{/* Regular Users */}
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<UserCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+							Regular Users ({regularUsers.length})
+						</CardTitle>
+						<CardDescription>Active users with standard permissions</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						{regularUsers.length === 0 ? (
+							<p className="text-sm text-muted-foreground">No regular users found</p>
+						) : (
+							regularUsers.map((user) => (
+								<div
+									key={user.email}
+									className="flex items-center justify-between rounded-lg border p-4"
+								>
+									<div className="flex items-center gap-3">
+										<Avatar className="h-10 w-10">
+											<AvatarImage src={user.image} alt={user.first_name} />
+											<AvatarFallback>{getInitials(user.first_name)}</AvatarFallback>
+										</Avatar>
+										<div>
+											<p className="font-medium">{user.first_name}</p>
+											<p className="text-sm text-muted-foreground">{user.email}</p>
+										</div>
+									</div>
+									<div className="flex items-center gap-2">
+										<Button
+											variant="outline"
+											size="sm"
+											className="text-blue-600 hover:text-blue-700 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+											onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
+											disabled={updatingUser === user.email}
+										>
+											{updatingUser === user.email ? (
+												"Processing..."
+											) : (
+												<>
+													<ShieldCheck className="mr-2 h-4 w-4" />
+													Make Admin
+												</>
+											)}
+										</Button>
+										<Button
+											variant="outline"
+											size="sm"
+											className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+											onClick={() => setConfirmAction({ user, action: "reject" })}
+											disabled={updatingUser === user.email}
+										>
+											<UserX className="mr-2 h-4 w-4" />
+											Revoke Access
+										</Button>
+									</div>
+								</div>
+							))
+						)}
+					</CardContent>
+				</Card>
+			</div>
+
+			{/* Confirmation Dialog */}
+			<Dialog open={!!confirmAction} onOpenChange={() => setConfirmAction(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Confirm Action</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to {getActionText(confirmAction?.action || "")}{" "}
+							<strong>{confirmAction?.user?.first_name}</strong> ? <br />
+							{(confirmAction?.action === "reject" || confirmAction?.action === "removeAdmin") && (
+								<strong>This action will affect their access to the application.</strong>
+							)}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setConfirmAction(null)}>
+							Cancel
+						</Button>
+						<Button
+							variant={
+								confirmAction?.action === "reject" || confirmAction?.action === "removeAdmin"
+									? "destructive"
+									: "default"
+							}
+							onClick={handleConfirmAction}
+							disabled={!!updatingUser}
+						>
+							{updatingUser ? "Processing..." : "Confirm"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

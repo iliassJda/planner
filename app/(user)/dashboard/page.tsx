@@ -33,6 +33,8 @@ import UserSkeleton from "@/components/user-skeleton";
 import { getAllWeeks, insertAvailability, getAvailabilityByEmail } from "@/action/supabase";
 import { useRouter } from "next/navigation";
 
+import { getInitials } from "@/help_functions";
+
 // Mock data - Replace with actual data fetching
 // const mockActiveWeeks: Week[] = [
 // 	{ id: "2026-5", week_number: 5, year: 2026, week_label: "Week 5", is_active: true },
@@ -88,7 +90,7 @@ const AVAILABILITY_OPTIONS = [
 
 export default function Dashboard() {
 	const user = useUser();
-	const router = useRouter();
+	// console.log("User in Dashboard:", user);
 	const [availabilities, setAvailabilities] = useState<
 		Record<string, Record<string, DayAvailability>>
 	>({});
@@ -114,14 +116,6 @@ export default function Dashboard() {
 	useEffect(() => {
 		fetchData();
 	}, [user?.email]);
-
-	const getInitials = (name: string) => {
-		return name
-			.split(" ")
-			.map((n) => n[0])
-			.join("")
-			.toUpperCase();
-	};
 
 	const currentDate = new Date();
 	const formattedDate = currentDate.toLocaleDateString("en-US", {
@@ -151,7 +145,7 @@ export default function Dashboard() {
 		setSubmitting(weekId);
 		try {
 			const weekAvailability = availabilities[weekId] || {};
-			console.log("Week Availability:", weekAvailability);
+			// console.log("Week Availability:", weekAvailability);
 			const availability: Availability = {
 				email: user?.email || "",
 				week_id: weekId,
@@ -230,7 +224,7 @@ export default function Dashboard() {
 	// const completedWeeks = activeWeeks.filter((w) => submittedWeeks.has(w.id));
 	const completedWeeks = currentAvailability;
 	// const completedWeeks =
-	console.log("Completed Weeks:", completedWeeks);
+	// console.log("Completed Weeks:", completedWeeks);
 
 	if (loading) {
 		return <UserSkeleton />;
@@ -242,15 +236,13 @@ export default function Dashboard() {
 			<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 				<div className="flex items-center gap-4">
 					<Avatar className="h-16 w-16">
-						<AvatarImage src={user?.image} alt={user?.name} />
+						<AvatarImage src={user?.image} alt={user?.first_name} referrerPolicy="no-referrer" />
 						<AvatarFallback className="text-lg">
-							{user?.name ? getInitials(user.name) : "U"}
+							{user?.first_name ? getInitials(user.first_name) : "U"}
 						</AvatarFallback>
 					</Avatar>
 					<div>
-						<h1 className="text-2xl font-bold md:text-3xl">
-							Welcome back, {user?.name?.split(" ")[0]}!
-						</h1>
+						<h1 className="text-2xl font-bold md:text-3xl">Welcome back, {user?.first_name}!</h1>
 						<p className="text-muted-foreground">{formattedDate}</p>
 					</div>
 				</div>

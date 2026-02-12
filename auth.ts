@@ -32,16 +32,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 				// console.log("Supabase error:", error);
 				return false;
 			}
+			const userFirstName = user?.name?.split(" ")[0];
+
+			// console.log("First name is " + userFirstName);
 
 			// 2. If no existing user, insert a new one
 			if (!existingUser) {
 				await supabase.from("User").insert({
+					first_name: userFirstName,
 					email,
 					allowed: false,
 					admin: false,
 				});
 			} else {
-				console.log("user " + user.email + " already exists in the database so not added");
+				// console.log("user " + user.email + " already exists in the database so not added");
 			}
 
 			return true;

@@ -31,11 +31,13 @@ export default async function RootLayout({
 	}
 
 	// const user = session.user as User;
+	// user?.name?.split(" ")[0]
 	const user: User = {
 		email: session.user.email as string,
-		name: session.user.name as string,
+		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
 		admin: false,
+		// allowed: false,
 	};
 	// This gets the data to check whether the user is allowed on the website by checking the
 	// allowed column in supabase
@@ -44,6 +46,8 @@ export default async function RootLayout({
 	if (data == null) {
 		return Restricted({ user });
 	}
+
+	// user.allowed = true;
 
 	if (data.admin) {
 		redirect("/admin");

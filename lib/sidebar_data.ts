@@ -10,13 +10,17 @@ const userData = {
 const adminData = {
 	navMain: [
 		{
+			title: "Dashboard",
+			url: "/admin",
+		},
+		{
 			title: "All users",
 			url: "/admin/all-users",
 		},
-		// {
-		// 	title: "Admin thing 2",
-		// 	url: "/admin/thing2",
-		// },
+		{
+			title: "Data",
+			url: "/admin/data",
+		},
 	],
 };
 

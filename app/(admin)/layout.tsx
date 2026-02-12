@@ -32,7 +32,7 @@ export default async function RootLayout({
 
 	const user: User = {
 		email: session.user.email as string,
-		name: session.user.name as string,
+		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
 		admin: false,
 	};
@@ -46,10 +46,6 @@ export default async function RootLayout({
 	}
 
 	user.admin = true;
-
-	// if (!data.admin) {
-	// 	redirect("/");
-	// }
 
 	//Check for admin !
 

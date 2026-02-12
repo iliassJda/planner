@@ -1,8 +1,9 @@
 type User = {
-	name?: string;
+	first_name: string;
 	email: string;
 	image: string;
 	admin: boolean;
+	allowed?: boolean;
 };
 
 type Week = {
