@@ -34,11 +34,17 @@ import {
 	Clock,
 	X,
 	RefreshCw,
+	Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/help_functions";
-import { getAllAvailability, getAllUsers, getAllWeeks } from "@/action/supabase";
+import {
+	exportAvailability,
+	getAllAvailability,
+	getAllUsers,
+	getAllWeeks,
+} from "@/action/supabase";
 import type { Availability, DayAvailability, User, Week } from "@/types";
 import UserSkeleton from "@/components/user-skeleton";
 import Image from "next/image";
@@ -161,6 +167,7 @@ export default function DataPage() {
 	const [weeks, setWeeks] = useState<Week[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
+	const [downloading, setDownloading] = useState(false);
 	const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 	const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -183,6 +190,68 @@ export default function DataPage() {
 			setLoading(false);
 		} finally {
 			setRefreshing(false);
+		}
+	};
+
+	const handleDownload = async () => {
+		setDownloading(true);
+		try {
+			const availabilityData = await exportAvailability();
+			if (availabilityData && availabilityData.length > 0) {
+				// Create CSV content
+				const headers = [
+					"Email",
+					"Week ID",
+					"Monday",
+					"Tuesday",
+					"Wednesday",
+					"Thursday",
+					"Friday",
+					"Saturday",
+					"Sunday",
+					"Week Number",
+					"Hours Desired",
+				];
+
+				const csvContent = [
+					headers.join(","),
+					...availabilityData.map((row) =>
+						[
+							row.email,
+							row.week_id,
+							row.monday,
+							row.tuesday,
+							row.wednesday,
+							row.thursday,
+							row.friday,
+							row.saturday,
+							row.sunday,
+							row.week_number,
+							row.hours,
+						].join(","),
+					),
+				].join("\n");
+
+				// Create and download the file
+				const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+				const link = document.createElement("a");
+				if (link.download !== undefined) {
+					const url = URL.createObjectURL(blob);
+					link.setAttribute("href", url);
+					link.setAttribute("download", `availability-${format(new Date(), "yyyy-MM-dd")}.csv`);
+					link.style.visibility = "hidden";
+					document.body.appendChild(link);
+					link.click();
+					document.body.removeChild(link);
+				}
+			} else {
+				toast.error("No availability data to export");
+			}
+		} catch (error) {
+			console.error("Error exporting data:", error);
+			toast.error("Failed to export data");
+		} finally {
+			setDownloading(false);
 		}
 	};
 
@@ -232,17 +301,30 @@ export default function DataPage() {
 					<h1 className="text-2xl font-bold md:text-3xl">Availability Overview</h1>
 					<p className="text-muted-foreground">View student availability across all active weeks</p>
 				</div>
-				<Button
-					variant="outline"
-					onClick={() => {
-						fetchData();
-						toast.success("Data refreshed");
-					}}
-					disabled={refreshing}
-				>
-					<RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
-					{refreshing ? "Refreshing..." : "Refresh"}
-				</Button>
+				<div className="flex gap-3">
+					<Button
+						variant="outline"
+						onClick={() => {
+							handleDownload();
+							toast.success("Data downloaded");
+						}}
+						disabled={downloading}
+					>
+						<Download className={cn("mr-2 h-4 w-4", downloading && "animate-bounce")} />
+						{downloading ? "Downloading..." : "Download"}
+					</Button>
+					<Button
+						variant="outline"
+						onClick={() => {
+							fetchData();
+							toast.success("Data refreshed");
+						}}
+						disabled={refreshing}
+					>
+						<RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
+						{refreshing ? "Refreshing..." : "Refresh"}
+					</Button>
+				</div>
 			</div>
 
 			{/* Stats */}
