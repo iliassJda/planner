@@ -31,7 +31,7 @@ import { Week, Availability, DayAvailability } from "@/types";
 // import AdminSkeleton from "@/components/admin-skeleton";
 import UserSkeleton from "@/components/user-skeleton";
 import { getAllWeeks, insertAvailability, getAvailabilityByEmail } from "@/action/supabase";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 
 import { getInitials } from "@/help_functions";
 
@@ -94,6 +94,7 @@ export default function Dashboard() {
 	const [availabilities, setAvailabilities] = useState<
 		Record<string, Record<string, DayAvailability>>
 	>({});
+	const [weekHours, setWeekHours] = useState<Record<string, number>>({});
 	const [activeWeeks, setActiveWeeks] = useState<Week[]>([]);
 	const [submittedWeeks, setSubmittedWeeks] = useState<Set<string>>(new Set());
 	const [currentAvailability, setCurrentAvailability] = useState<Availability[]>([]);
@@ -157,6 +158,7 @@ export default function Dashboard() {
 				friday: weekAvailability.friday || "not_available",
 				saturday: weekAvailability.saturday || "not_available",
 				sunday: weekAvailability.sunday || "not_available",
+				hours: weekHours[weekId] || 0,
 			};
 
 			await insertAvailability(availability);
@@ -322,7 +324,12 @@ export default function Dashboard() {
 										{/* Availability Summary */}
 										<div className="rounded-lg border bg-muted/30 p-4">
 											<div className="flex items-center justify-between mb-3">
-												<h4 className="font-medium">Current Availability</h4>
+												<h4 className="font-medium">Current Availability</h4>{" "}
+												<div className="text-sm text-muted-foreground">
+													{weekHours[week.id]
+														? `${weekHours[week.id]} hours desired`
+														: "No hours set"}
+												</div>{" "}
 												{/* <Dialog
 													open={editingWeek === week.id}
 													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
@@ -341,7 +348,6 @@ export default function Dashboard() {
 														</DialogHeader>
 													</DialogContent>
 												</Dialog> */}
-
 												<Dialog
 													open={editingWeek === week.id}
 													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
@@ -365,7 +371,7 @@ export default function Dashboard() {
 																return (
 																	<div key={day} className="border rounded-lg p-4 bg-card">
 																		<h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-																			<span className="text-primary">{DAY_LABELS[index]}</span>
+																			<span className="text-secondary">{DAY_LABELS[index]}</span>
 																			<span className="text-muted-foreground text-base font-normal">
 																				({day.charAt(0).toUpperCase() + day.slice(1)})
 																			</span>
@@ -414,6 +420,54 @@ export default function Dashboard() {
 																	</div>
 																);
 															})}
+															<div className="border rounded-lg p-4 bg-card">
+																<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-secondary">
+																	<Clock className="h-5 w-5" />
+																	Desired Hours
+																</h4>
+																<div className="space-y-3">
+																	<label className="block text-sm font-medium text-muted-foreground">
+																		How many hours would you like to work this week?
+																	</label>
+																	<div className="flex items-center gap-3">
+																		<input
+																			type="number"
+																			min="0"
+																			max="60"
+																			value={weekHours[week.id] || ""}
+																			onChange={(e) => {
+																				const value = Math.max(
+																					0,
+																					Math.min(60, parseInt(e.target.value) || 0),
+																				);
+																				setWeekHours((prev) => ({ ...prev, [week.id]: value }));
+																			}}
+																			placeholder="0"
+																			className="w-24 px-3 py-2 border rounded-md text-center font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
+																		/>
+																		<span className="text-sm text-muted-foreground">hours</span>
+																	</div>
+																	<div className="flex flex-wrap gap-2 mt-2">
+																		{[10, 20, 30, 40].map((hours) => (
+																			<button
+																				key={hours}
+																				type="button"
+																				onClick={() =>
+																					setWeekHours((prev) => ({ ...prev, [week.id]: hours }))
+																				}
+																				className={cn(
+																					"px-3 py-1 rounded-full text-xs font-medium transition-colors",
+																					weekHours[week.id] === hours
+																						? "bg-primary text-primary-foreground"
+																						: "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground",
+																				)}
+																			>
+																				{hours}h
+																			</button>
+																		))}
+																	</div>
+																</div>
+															</div>
 														</div>
 													</DialogContent>
 												</Dialog>
@@ -514,6 +568,7 @@ export default function Dashboard() {
 															<p className="text-sm text-muted-foreground">
 																{availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
 																available
+																{week.hours > 0 && ` • ${week.hours} hours desired`}
 															</p>
 														</div>
 													</div>

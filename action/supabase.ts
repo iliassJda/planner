@@ -3,6 +3,17 @@
 import { Availability, User, Week } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
+async function exportAvailability() {
+	const { data, error } = await supabaseAdmin.from("Availability").select("*");
+
+	if (error) {
+		console.error("Error fetching availability:", error);
+		return [];
+	}
+
+	return data as Availability[];
+}
+
 async function getAllowData(user: User) {
 	const { data, error } = await supabaseAdmin
 		.from("User")
@@ -207,4 +218,5 @@ export {
 	updateUserPermissions,
 	updateUserStatus,
 	getAllAvailability,
+	exportAvailability,
 };

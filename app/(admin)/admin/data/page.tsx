@@ -103,12 +103,17 @@ function getAvailabilityForDate(
 	availabilityData: Availability[],
 	users: User[],
 	weeks: Week[],
-): Array<{ user: User; availability: DayAvailability }> {
+): Array<{ user: User; availability: DayAvailability; hours: number; week_id: string }> {
 	const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ...
 	const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Mon=0, Sun=6
 	const dayKey = DAY_KEYS[dayIndex];
 
-	const results: Array<{ user: User; availability: DayAvailability }> = [];
+	const results: Array<{
+		user: User;
+		availability: DayAvailability;
+		hours: number;
+		week_id: string;
+	}> = [];
 
 	// Find which week this date belongs to
 	const matchingWeek = weeks.find((week) => {
@@ -125,7 +130,12 @@ function getAvailabilityForDate(
 				if (dayAvailability !== "not_available") {
 					const user = users.find((u) => u.email === a.email);
 					if (user) {
-						results.push({ user, availability: dayAvailability });
+						results.push({
+							user,
+							availability: dayAvailability,
+							hours: a.hours,
+							week_id: a.week_id,
+						});
 					}
 				}
 			}
@@ -327,9 +337,10 @@ export default function DataPage() {
 					<div className="grid grid-cols-7">
 						{calendarDays.map((date) => {
 							const dayData = getAvailabilityForDate(date, availabilityData, users, weeks);
+							console.log(`Date: ${format(date, "yyyy-MM-dd")}, Availability entries:`, dayData);
 							const inCurrentMonth = isSameMonth(date, currentMonth);
 							const today = isToday(date);
-							const maxDots = 5;
+							const maxDots = 3;
 							const visibleDots = dayData.slice(0, maxDots);
 							const extraCount = dayData.length - maxDots;
 
@@ -375,7 +386,10 @@ export default function DataPage() {
 														<span
 															className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", style.dot)}
 														/>
-														<span className="truncate leading-tight">{entry.user.first_name}</span>
+														<span className="truncate leading-tight">
+															{entry.user.first_name}
+															{entry.hours > 0 && ` (${entry.hours}h)`}
+														</span>
 													</div>
 												);
 											})}
@@ -405,7 +419,10 @@ export default function DataPage() {
 						</DialogTitle>
 						<DialogDescription>
 							{selectedDayData.length > 0
-								? `${selectedDayData.length} student${selectedDayData.length > 1 ? "s" : ""} available`
+								? `${selectedDayData.length} student${selectedDayData.length > 1 ? "s" : ""} available` +
+									(selectedDayData.some((d) => d.hours > 0)
+										? ` • Total desired: ${selectedDayData.reduce((sum, d) => sum + d.hours, 0)}h`
+										: "")
 								: "No students available on this day"}
 						</DialogDescription>
 					</DialogHeader>
@@ -430,7 +447,6 @@ export default function DataPage() {
 									);
 								})}
 							</div>
-
 							{/* Student list */}
 							<div className="space-y-2">
 								{selectedDayData.map((entry) => {
@@ -455,7 +471,10 @@ export default function DataPage() {
 												</Avatar>
 												<div>
 													<p className="text-sm font-medium">{entry.user.first_name}</p>
-													<p className="text-xs text-muted-foreground">{entry.user.email}</p>
+													<p className="text-xs text-muted-foreground">
+														{entry.user.email}
+														{entry.hours > 0 && ` • ${entry.hours}h desired`}
+													</p>
 												</div>
 											</div>
 											<div

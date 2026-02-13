@@ -1,3 +1,5 @@
+import { Availability } from "./types";
+
 const getInitials = (name: string) => {
 	return name
 		.split(" ")
@@ -6,4 +8,10 @@ const getInitials = (name: string) => {
 		.toUpperCase();
 };
 
-export { getInitials };
+function convertToCSV(data: Availability[]) {
+	const headers = Object.keys(data[0]).join(",");
+	const rows = data.map((obj) => Object.values(obj).join(","));
+	return [headers, ...rows].join("\n");
+}
+
+export { getInitials, convertToCSV };
