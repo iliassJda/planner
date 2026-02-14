@@ -127,6 +127,22 @@ async function insertAvailability(availability: Availability) {
 	return data as Availability[];
 }
 
+async function updateAvailability(availability: Availability) {
+	const { data, error } = await supabaseAdmin
+		.from("Availability")
+		.update(availability)
+		.eq("week_id", availability.week_id)
+		.eq("email", availability.email)
+		.select();
+
+	if (error) {
+		console.error("Error updating availability:", error);
+		return null;
+	}
+
+	return data as Availability[];
+}
+
 async function getAvailabilityByEmail(email: string) {
 	const { data, error } = await supabaseAdmin.from("Availability").select("*").eq("email", email);
 
@@ -212,6 +228,7 @@ export {
 	insertWeeks,
 	upsertWeeks,
 	insertAvailability,
+	updateAvailability,
 	getAvailabilityByEmail,
 	deleteWeek,
 	getAllUsers,

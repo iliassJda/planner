@@ -30,18 +30,16 @@ import { toast } from "sonner";
 import { Week, Availability, DayAvailability } from "@/types";
 // import AdminSkeleton from "@/components/admin-skeleton";
 import UserSkeleton from "@/components/user-skeleton";
-import { getAllWeeks, insertAvailability, getAvailabilityByEmail } from "@/action/supabase";
+import {
+	getAllWeeks,
+	insertAvailability,
+	updateAvailability,
+	getAvailabilityByEmail,
+} from "@/action/supabase";
 // import { useRouter } from "next/navigation";
 import { getWeekDateRange } from "@/help_functions";
 
 import { getInitials } from "@/help_functions";
-
-// Mock data - Replace with actual data fetching
-// const mockActiveWeeks: Week[] = [
-// 	{ id: "2026-5", week_number: 5, year: 2026, week_label: "Week 5", is_active: true },
-// 	{ id: "2026-6", week_number: 6, year: 2026, week_label: "Week 6", is_active: true },
-// 	{ id: "2026-7", week_number: 7, year: 2026, week_label: "Week 7", is_active: true },
-// ];
 
 const DAYS = [
 	"monday",
@@ -101,6 +99,7 @@ export default function Dashboard() {
 	const [currentAvailability, setCurrentAvailability] = useState<Availability[]>([]);
 	const [submitting, setSubmitting] = useState<string | null>(null);
 	const [editingWeek, setEditingWeek] = useState<string | null>(null);
+	const [editingSubmittedWeek, setEditingSubmittedWeek] = useState<Availability | null>(null);
 	const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
 	const [loading, setLoading] = useState(true);
 
@@ -172,6 +171,57 @@ export default function Dashboard() {
 		} catch (error) {
 			console.error("Error submitting availability:", error);
 			toast.error("Failed to submit availability");
+		} finally {
+			setSubmitting(null);
+		}
+	};
+
+	const handleEditSubmittedWeek = (week: Availability) => {
+		// Pre-populate the availabilities and hours for editing
+		setAvailabilities((prev) => ({
+			...prev,
+			[week.week_id]: {
+				monday: week.monday,
+				tuesday: week.tuesday,
+				wednesday: week.wednesday,
+				thursday: week.thursday,
+				friday: week.friday,
+				saturday: week.saturday,
+				sunday: week.sunday,
+			},
+		}));
+		setWeekHours((prev) => ({ ...prev, [week.week_id]: week.hours }));
+		setEditingSubmittedWeek(week);
+	};
+
+	const handleUpdateAvailability = async () => {
+		if (!editingSubmittedWeek) return;
+
+		setSubmitting(editingSubmittedWeek.week_id);
+		try {
+			const weekAvailability = availabilities[editingSubmittedWeek.week_id] || {};
+			const updatedAvailability: Availability = {
+				...editingSubmittedWeek,
+				monday: weekAvailability.monday || "not_available",
+				tuesday: weekAvailability.tuesday || "not_available",
+				wednesday: weekAvailability.wednesday || "not_available",
+				thursday: weekAvailability.thursday || "not_available",
+				friday: weekAvailability.friday || "not_available",
+				saturday: weekAvailability.saturday || "not_available",
+				sunday: weekAvailability.sunday || "not_available",
+				hours: weekHours[editingSubmittedWeek.week_id] || 0,
+			};
+
+			await updateAvailability(updatedAvailability);
+
+			// Refetch data to update the display
+			await fetchData();
+
+			setEditingSubmittedWeek(null);
+			toast.success(`Availability updated for Week ${editingSubmittedWeek.week_number}`);
+		} catch (error) {
+			console.error("Error updating availability:", error);
+			toast.error("Failed to update availability");
 		} finally {
 			setSubmitting(null);
 		}
@@ -397,6 +447,7 @@ export default function Dashboard() {
 																	</div>
 																);
 															})}
+
 															<div className="border rounded-lg p-4 bg-card">
 																<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
 																	<Clock className="h-5 w-5" />
@@ -445,6 +496,29 @@ export default function Dashboard() {
 																	</div>
 																</div>
 															</div>
+															<div className="grid gap-1.5">
+																<Button
+																	size="sm"
+																	onClick={() => handleSubmitAvailability(week.id)}
+																	disabled={submitting === week.id}
+																>
+																	{submitting === week.id ? (
+																		"Submitting..."
+																	) : (
+																		<>
+																			<Send className="mr-2 h-4 w-4" />
+																			Submit
+																		</>
+																	)}
+																</Button>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	onClick={() => setEditingWeek(null)}
+																>
+																	Cancel
+																</Button>
+															</div>
 														</div>
 													</DialogContent>
 												</Dialog>
@@ -492,20 +566,6 @@ export default function Dashboard() {
 										<span className="text-sm text-muted-foreground">
 											{getSelectedDaysCount(week.id)} days with availability
 										</span>
-										<Button
-											size="sm"
-											onClick={() => handleSubmitAvailability(week.id)}
-											disabled={submitting === week.id}
-										>
-											{submitting === week.id ? (
-												"Submitting..."
-											) : (
-												<>
-													<Send className="mr-2 h-4 w-4" />
-													Submit
-												</>
-											)}
-										</Button>
 									</div>
 								</CardContent>
 							</Card>
@@ -599,6 +659,17 @@ export default function Dashboard() {
 																);
 															})}
 														</div>
+														<div className="pt-4 flex justify-end">
+															<Button
+																onClick={() => handleEditSubmittedWeek(week)}
+																variant="outline"
+																size="sm"
+																className="flex items-center gap-2"
+															>
+																<CalendarIcon className="h-4 w-4" />
+																Edit Availability
+															</Button>
+														</div>
 													</div>
 												</div>
 											)}
@@ -609,6 +680,153 @@ export default function Dashboard() {
 					</div>
 				</div>
 			)}
+
+			{/* Edit Submitted Week Dialog */}
+			<Dialog
+				open={!!editingSubmittedWeek}
+				onOpenChange={(open) => {
+					if (!open) {
+						setEditingSubmittedWeek(null);
+					}
+				}}
+			>
+				<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+					<DialogHeader>
+						<DialogTitle>Edit Availability - Week {editingSubmittedWeek?.week_number}</DialogTitle>
+						<DialogDescription>
+							Update your availability for each day of the week.
+						</DialogDescription>
+					</DialogHeader>
+					{editingSubmittedWeek && (
+						<div className="space-y-4 mt-4">
+							{DAYS.map((day, index) => {
+								const currentAvailability =
+									availabilities[editingSubmittedWeek.week_id]?.[day] || "not_available";
+								return (
+									<div key={day} className="border rounded-lg p-4 bg-card">
+										<h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+											<span className="text-primary">{DAY_LABELS[index]}</span>
+											<span className="text-muted-foreground text-base font-normal">
+												({day.charAt(0).toUpperCase() + day.slice(1)})
+											</span>
+										</h4>
+										<div className="grid gap-2">
+											{AVAILABILITY_OPTIONS.map((option) => {
+												const isSelected = currentAvailability === option.value;
+												const Icon = option.icon;
+												return (
+													<button
+														key={option.value}
+														type="button"
+														onClick={() =>
+															handleDayToggle(editingSubmittedWeek.week_id, day, option.value)
+														}
+														className={cn(
+															"flex items-center gap-3 p-3 rounded-md border-2 transition-all duration-200 hover:shadow-md w-full text-left",
+															isSelected
+																? `${option.bg} ${option.border} ring-2 ring-offset-2 ring-current ${option.color} shadow-md`
+																: "bg-muted/50 border-muted hover:border-muted-foreground/30",
+														)}
+													>
+														<Icon
+															className={cn(
+																"h-5 w-5 flex-shrink-0",
+																isSelected ? option.color : "text-muted-foreground",
+															)}
+														/>
+														<span
+															className={cn(
+																"font-medium",
+																isSelected ? option.color : "text-muted-foreground",
+															)}
+														>
+															{option.label}
+														</span>
+														{isSelected && (
+															<CheckCircle2 className={cn("h-5 w-5 ml-auto", option.color)} />
+														)}
+													</button>
+												);
+											})}
+										</div>
+									</div>
+								);
+							})}
+
+							<div className="border rounded-lg p-4 bg-card">
+								<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
+									<Clock className="h-5 w-5" />
+									Desired Hours
+								</h4>
+								<div className="space-y-3">
+									<label className="block text-sm font-medium text-muted-foreground">
+										How many hours would you like to work this week?
+									</label>
+									<div className="flex items-center gap-3">
+										<input
+											type="number"
+											min="0"
+											max="60"
+											value={weekHours[editingSubmittedWeek.week_id] || ""}
+											onChange={(e) => {
+												const value = Math.max(0, Math.min(60, parseInt(e.target.value) || 0));
+												setWeekHours((prev) => ({
+													...prev,
+													[editingSubmittedWeek.week_id]: value,
+												}));
+											}}
+											placeholder="0"
+											className="w-24 px-3 py-2 border rounded-md text-center font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
+										/>
+										<span className="text-sm text-muted-foreground">hours</span>
+									</div>
+									<div className="flex flex-wrap gap-2 mt-2">
+										{[10, 20, 30, 40].map((hours) => (
+											<button
+												key={hours}
+												type="button"
+												onClick={() =>
+													setWeekHours((prev) => ({
+														...prev,
+														[editingSubmittedWeek.week_id]: hours,
+													}))
+												}
+												className={cn(
+													"px-3 py-1 rounded-full text-xs font-medium transition-colors",
+													weekHours[editingSubmittedWeek.week_id] === hours
+														? "bg-primary text-primary-foreground"
+														: "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground",
+												)}
+											>
+												{hours}h
+											</button>
+										))}
+									</div>
+								</div>
+							</div>
+							<div className="grid gap-1.5">
+								<Button
+									size="sm"
+									onClick={handleUpdateAvailability}
+									disabled={submitting === editingSubmittedWeek.week_id}
+								>
+									{submitting === editingSubmittedWeek.week_id ? (
+										"Updating..."
+									) : (
+										<>
+											<Send className="mr-2 h-4 w-4" />
+											Update
+										</>
+									)}
+								</Button>
+								<Button size="sm" variant="outline" onClick={() => setEditingSubmittedWeek(null)}>
+									Cancel
+								</Button>
+							</div>
+						</div>
+					)}
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
