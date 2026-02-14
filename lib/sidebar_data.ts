@@ -1,10 +1,5 @@
 const userData = {
-	navMain: [
-		{
-			title: "Week",
-			url: "/dashboards/weeks",
-		},
-	],
+	navMain: [],
 };
 
 const adminData = {

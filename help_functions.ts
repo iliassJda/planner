@@ -14,4 +14,17 @@ function convertToCSV(data: Availability[]) {
 	return [headers, ...rows].join("\n");
 }
 
-export { getInitials, convertToCSV };
+function getWeekDateRange(weekNumber: number, year: number) {
+	const firstDayOfYear = new Date(year, 0, 1);
+	const daysOffset = (weekNumber - 1) * 7 - firstDayOfYear.getDay() + 1;
+	const startDate = new Date(year, 0, 1 + daysOffset);
+	const endDate = new Date(startDate);
+	endDate.setDate(startDate.getDate() + 6);
+
+	const format = (date: Date) =>
+		date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+	return `${format(startDate)} - ${format(endDate)}`;
+}
+
+export { getInitials, convertToCSV, getWeekDateRange };

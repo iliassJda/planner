@@ -32,6 +32,7 @@ import { Week, Availability, DayAvailability } from "@/types";
 import UserSkeleton from "@/components/user-skeleton";
 import { getAllWeeks, insertAvailability, getAvailabilityByEmail } from "@/action/supabase";
 // import { useRouter } from "next/navigation";
+import { getWeekDateRange } from "@/help_functions";
 
 import { getInitials } from "@/help_functions";
 
@@ -146,7 +147,6 @@ export default function Dashboard() {
 		setSubmitting(weekId);
 		try {
 			const weekAvailability = availabilities[weekId] || {};
-			// console.log("Week Availability:", weekAvailability);
 			const availability: Availability = {
 				email: user?.email || "",
 				week_id: weekId,
@@ -159,6 +159,7 @@ export default function Dashboard() {
 				saturday: weekAvailability.saturday || "not_available",
 				sunday: weekAvailability.sunday || "not_available",
 				hours: weekHours[weekId] || 0,
+				year: parseInt(weekId.split("-")[0], 10),
 			};
 
 			await insertAvailability(availability);
@@ -178,12 +179,6 @@ export default function Dashboard() {
 
 	const getSelectedDaysCount = (weekId: string) => {
 		const weekAvailability = availabilities[weekId] || {};
-		// console.log(
-		// 	"Calculating selected days for weekId:",
-		// 	weekId,
-		// 	"with availability:",
-		// 	availabilities,
-		// );
 		return Object.values(weekAvailability).filter(
 			(availability) => availability !== "not_available",
 		).length;
@@ -314,7 +309,7 @@ export default function Dashboard() {
 										<Calendar className="h-5 w-5 text-primary" />
 										Week {week.week_number}
 									</CardTitle>
-									<CardDescription>Year {week.year}</CardDescription>
+									<CardDescription>{getWeekDateRange(week.week_number, week.year)}</CardDescription>
 								</CardHeader>
 								<CardContent className="pt-4">
 									<p className="mb-6 text-sm text-muted-foreground">
@@ -330,24 +325,6 @@ export default function Dashboard() {
 														? `${weekHours[week.id]} hours desired`
 														: "No hours set"}
 												</div>{" "}
-												{/* <Dialog
-													open={editingWeek === week.id}
-													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
-												>
-													<DialogTrigger asChild>
-														<Button variant="outline" size="sm">
-															Edit Schedule
-														</Button>
-													</DialogTrigger>
-													<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-														<DialogHeader>
-															<DialogTitle>Set Availability - Week {week.week_number}</DialogTitle>
-															<DialogDescription>
-																Select your availability for each day of the week.
-															</DialogDescription>
-														</DialogHeader>
-													</DialogContent>
-												</Dialog> */}
 												<Dialog
 													open={editingWeek === week.id}
 													onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
@@ -371,7 +348,7 @@ export default function Dashboard() {
 																return (
 																	<div key={day} className="border rounded-lg p-4 bg-card">
 																		<h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-																			<span className="text-secondary">{DAY_LABELS[index]}</span>
+																			<span className="text-primary">{DAY_LABELS[index]}</span>
 																			<span className="text-muted-foreground text-base font-normal">
 																				({day.charAt(0).toUpperCase() + day.slice(1)})
 																			</span>
@@ -421,7 +398,7 @@ export default function Dashboard() {
 																);
 															})}
 															<div className="border rounded-lg p-4 bg-card">
-																<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-secondary">
+																<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
 																	<Clock className="h-5 w-5" />
 																	Desired Hours
 																</h4>
@@ -568,7 +545,8 @@ export default function Dashboard() {
 															<p className="text-sm text-muted-foreground">
 																{availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
 																available
-																{week.hours > 0 && ` • ${week.hours} hours desired`}
+																{week.hours > 0 && ` • ${week.hours} hours desired • `}(
+																{getWeekDateRange(week.week_number, week.year)})
 															</p>
 														</div>
 													</div>

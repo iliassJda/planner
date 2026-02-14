@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar, Users, Check, X, Save, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { Week } from "@/types";
+import { getWeekDateRange } from "@/help_functions";
 
 import { getAllWeeks, getTotalStudents, upsertWeeks, deleteWeek } from "@/action/supabase";
 import AdminSkeleton from "@/components/admin-skeleton";
@@ -23,7 +24,7 @@ import AdminSkeleton from "@/components/admin-skeleton";
 function getCurrentWeek() {
 	const now = new Date();
 	const startOfYear = new Date(now.getFullYear(), 0, 1);
-	const pastDaysOfYear = (now.getTime() - startOfYear.getTime()) / 86400000;
+	const pastDaysOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
 	const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
 	return {
 		week: Math.min(weekNumber, 53),
@@ -57,18 +58,6 @@ function generateWeeksList(startWeek: number, startYear: number, count: number =
 }
 
 // Get the date range for a week
-function getWeekDateRange(weekNumber: number, year: number) {
-	const firstDayOfYear = new Date(year, 0, 1);
-	const daysOffset = (weekNumber - 1) * 7 - firstDayOfYear.getDay() + 1;
-	const startDate = new Date(year, 0, 1 + daysOffset);
-	const endDate = new Date(startDate);
-	endDate.setDate(startDate.getDate() + 6);
-
-	const format = (date: Date) =>
-		date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-	return `${format(startDate)} - ${format(endDate)}`;
-}
 
 export default function AdminPage() {
 	const [selectedWeeks, setSelectedWeeks] = useState<Set<string>>(new Set());

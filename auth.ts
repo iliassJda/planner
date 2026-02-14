@@ -43,6 +43,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 					email,
 					allowed: false,
 					admin: false,
+					image: user.image,
 				});
 			} else {
 				// console.log("user " + user.email + " already exists in the database so not added");

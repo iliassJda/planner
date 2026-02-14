@@ -29,6 +29,7 @@ type Availability = {
 	saturday: DayAvailability;
 	sunday: DayAvailability;
 	hours: number;
+	year: number;
 };
 
 export type { User, Week, Availability, DayAvailability };
