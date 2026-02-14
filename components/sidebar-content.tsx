@@ -22,7 +22,7 @@ export default function Content({ admin }: { admin: boolean }) {
 										</a>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
-						  ))
+							))
 						: userData.navMain.map((item) => (
 								<SidebarMenuItem key={item.title}>
 									<SidebarMenuButton asChild>
@@ -31,7 +31,7 @@ export default function Content({ admin }: { admin: boolean }) {
 										</a>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
-						  ))}
+							))}
 				</SidebarMenu>
 			</SidebarGroup>
 		</SidebarContent>

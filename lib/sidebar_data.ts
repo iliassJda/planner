@@ -1,5 +1,10 @@
 const userData = {
-	navMain: [],
+	navMain: [
+		{
+			title: "",
+			url: "",
+		},
+	],
 };
 
 const adminData = {
