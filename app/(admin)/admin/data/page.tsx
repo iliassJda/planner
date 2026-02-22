@@ -501,11 +501,11 @@ export default function DataPage() {
 						</DialogTitle>
 						<DialogDescription>
 							{selectedDayData.length > 0
-								? `${selectedDayData.length} student${selectedDayData.length > 1 ? "s" : ""} available` +
-									(selectedDayData.some((d) => d.hours > 0)
-										? ` • Total desired: ${selectedDayData.reduce((sum, d) => sum + d.hours, 0)}h`
-										: "")
-								: "No students available on this day"}
+								? `${selectedDayData.length} student${selectedDayData.length > 1 ? "s" : ""} available`
+								: // (selectedDayData.some((d) => d.hours > 0)
+									// 	? ` • Total desired: ${selectedDayData.reduce((sum, d) => sum + d.hours, 0)}h`
+									// 	: "")
+									"No students available on this day"}
 						</DialogDescription>
 					</DialogHeader>
 
