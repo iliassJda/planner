@@ -146,6 +146,12 @@ export default function Dashboard() {
 		setSubmitting(weekId);
 		try {
 			const weekAvailability = availabilities[weekId] || {};
+			// console.log(
+			// 	"This is the week ",
+			// 	availabilities[weekId],
+			// 	" and this is the result",
+			// 	weekAvailability,
+			// );
 			const availability: Availability = {
 				email: user?.email || "",
 				week_id: weekId,
@@ -161,6 +167,7 @@ export default function Dashboard() {
 				year: parseInt(weekId.split("-")[0], 10),
 			};
 
+			// console.log("Submitting availability:", availability);
 			await insertAvailability(availability);
 
 			// Refetch data to update both completed and active weeks
@@ -604,8 +611,7 @@ export default function Dashboard() {
 															<p className="font-medium text-lg">Week {week.week_number}</p>
 															<p className="text-sm text-muted-foreground">
 																{availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
-																available
-																{week.hours > 0 && ` • ${week.hours} hours desired • `}(
+																available • {week.hours > 0 && `${week.hours} hours desired • `}(
 																{getWeekDateRange(week.week_number, week.year)})
 															</p>
 														</div>

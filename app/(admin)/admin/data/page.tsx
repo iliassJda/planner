@@ -419,7 +419,7 @@ export default function DataPage() {
 					<div className="grid grid-cols-7">
 						{calendarDays.map((date) => {
 							const dayData = getAvailabilityForDate(date, availabilityData, users, weeks);
-							console.log(`Date: ${format(date, "yyyy-MM-dd")}, Availability entries:`, dayData);
+							// console.log(`Date: ${format(date, "yyyy-MM-dd")}, Availability entries:`, dayData);
 							const inCurrentMonth = isSameMonth(date, currentMonth);
 							const today = isToday(date);
 							const maxDots = 3;

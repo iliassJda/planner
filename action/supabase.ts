@@ -150,7 +150,7 @@ async function getAvailabilityByEmail(email: string) {
 		console.error("Error fetching availability by email:", error);
 		return [];
 	}
-	console.log("Fetched availability for email:", email, data);
+	// console.log("Fetched availability for email:", email, data);
 	return data as Availability[];
 }
 

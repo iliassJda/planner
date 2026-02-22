@@ -127,7 +127,7 @@ export default function AllUsersPage() {
 	const adminUsers = activeUsers.filter((user) => user.admin);
 	const regularUsers = activeUsers.filter((user) => !user.admin);
 
-	console.log("All users:", users);
+	// console.log("All users:", users);
 
 	if (loading) {
 		return <UserSkeleton />;
