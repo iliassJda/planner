@@ -17,14 +17,23 @@ import { toast } from "sonner";
 import { Week } from "@/types";
 import { getWeekDateRange } from "@/help_functions";
 
-import { getAllWeeks, getTotalStudents, upsertWeeks, deleteWeek } from "@/action/supabase";
+import {
+	getAllWeeks,
+	getTotalStudents,
+	upsertWeeks,
+	deleteWeek,
+	deactivateWeek,
+	activateWeek,
+} from "@/action/supabase";
 import AdminSkeleton from "@/components/admin-skeleton";
 
 // Get the current week number and year
 function getCurrentWeek() {
 	const now = new Date();
 	const startOfYear = new Date(now.getFullYear(), 0, 1);
-	const pastDaysOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+	const pastDaysOfYear = Math.floor(
+		(now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000),
+	);
 	const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
 	return {
 		week: Math.min(weekNumber, 53),
@@ -65,7 +74,17 @@ export default function AdminPage() {
 	const [loading, setLoading] = useState(true);
 	const [totalStudents, setTotalStudents] = useState<number | null>(null);
 	const [weeks, setWeeks] = useState<Week[]>([]);
+	const [deactiveWeek, setDeactiveWeek] = useState<string | null>(null);
+	const [activatingWeekId, setActivatingWeekId] = useState<string | null>(null);
 	const [deletingWeek, setDeletingWeek] = useState<string | null>(null);
+	const [confirmDeactivateWeek, setConfirmDeactivateWeek] = useState<{
+		id: string;
+		number: number;
+	} | null>(null);
+	const [confirmActivateWeek, setConfirmActivateWeek] = useState<{
+		id: string;
+		number: number;
+	} | null>(null);
 	const [confirmDeleteWeek, setConfirmDeleteWeek] = useState<{ id: string; number: number } | null>(
 		null,
 	);
@@ -86,6 +105,10 @@ export default function AdminPage() {
 	const weeksList = generateWeeksList(current.week, current.year).filter(
 		(week) => !weeks.some((w) => w.id === week.id),
 	);
+
+	// Separate active and deactivated weeks
+	const activeWeeks = weeks.filter((w) => w.is_active !== false);
+	const deactivatedWeeks = weeks.filter((w) => w.is_active === false);
 
 	function handleWeekToggle(weekId: string, checked: boolean) {
 		const newSelected = new Set(selectedWeeks);
@@ -132,8 +155,58 @@ export default function AdminPage() {
 		}
 	}
 
+	function handleDeactivateWeekClick(weekId: string, weekNumber: number) {
+		setConfirmDeactivateWeek({ id: weekId, number: weekNumber });
+	}
+
+	function handleActivateWeekClick(weekId: string, weekNumber: number) {
+		setConfirmActivateWeek({ id: weekId, number: weekNumber });
+	}
+
 	function handleDeleteWeekClick(weekId: string, weekNumber: number) {
 		setConfirmDeleteWeek({ id: weekId, number: weekNumber });
+	}
+
+	async function handleConfirmActivateWeek() {
+		if (!confirmActivateWeek) return;
+
+		setActivatingWeekId(confirmActivateWeek.id);
+		setConfirmActivateWeek(null);
+		try {
+			const result = await activateWeek(confirmActivateWeek.id);
+			if (result) {
+				toast.success(`Week ${confirmActivateWeek.number} activated successfully`);
+				await fetchData();
+			} else {
+				toast.error("Failed to activate week");
+			}
+		} catch (error) {
+			console.error("Error activating week:", error);
+			toast.error("Failed to activate week");
+		} finally {
+			setActivatingWeekId(null);
+		}
+	}
+
+	async function handleConfirmDeactivate() {
+		if (!confirmDeactivateWeek) return;
+
+		setDeactiveWeek(confirmDeactivateWeek.id);
+		setConfirmDeactivateWeek(null);
+		try {
+			const result = await deactivateWeek(confirmDeactivateWeek.id);
+			if (result) {
+				toast.success(`Week ${confirmDeactivateWeek.number} deactivated successfully`);
+				await fetchData();
+			} else {
+				toast.error("Failed to deactivate week");
+			}
+		} catch (error) {
+			console.error("Error deactivating week:", error);
+			toast.error("Failed to deactivate week");
+		} finally {
+			setDeactiveWeek(null);
+		}
 	}
 
 	async function handleConfirmDelete() {
@@ -144,14 +217,14 @@ export default function AdminPage() {
 		try {
 			const result = await deleteWeek(confirmDeleteWeek.id);
 			if (result) {
-				toast.success(`Week ${confirmDeleteWeek.number} removed successfully`);
+				toast.success(`Week ${confirmDeleteWeek.number} deleted successfully`);
 				await fetchData();
 			} else {
-				toast.error("Failed to remove week");
+				toast.error("Failed to delete week");
 			}
 		} catch (error) {
 			console.error("Error deleting week:", error);
-			toast.error("Failed to remove week");
+			toast.error("Failed to delete week");
 		} finally {
 			setDeletingWeek(null);
 		}
@@ -177,7 +250,7 @@ export default function AdminPage() {
 							<CalendarDays className="h-6 w-6" />
 						</div>
 						<div>
-							<p className="text-2xl font-bold">{weeks.length}</p>
+							<p className="text-2xl font-bold">{activeWeeks.length}</p>
 							<p className="text-sm text-muted-foreground">Active weeks</p>
 						</div>
 					</CardContent>
@@ -299,11 +372,11 @@ export default function AdminPage() {
 				</CardContent>
 			</Card>
 
-			{weeks.length > 0 && (
+			{activeWeeks.length > 0 && (
 				<div>
 					<h2 className="mb-4 text-xl font-semibold">Active Weeks</h2>
 					<div className="grid gap-4">
-						{weeks
+						{activeWeeks
 							.sort((a, b) => a.week_number - b.week_number)
 							.map((week) => {
 								return (
@@ -331,16 +404,16 @@ export default function AdminPage() {
 													<Button
 														variant="outline"
 														size="sm"
-														className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:border-red-800 dark:hover:bg-red-900/20"
-														onClick={() => handleDeleteWeekClick(week.id, week.week_number)}
-														disabled={deletingWeek === week.id}
+														// className="text-amber-600 hover:text-amber-700 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/20"
+														onClick={() => handleDeactivateWeekClick(week.id, week.week_number)}
+														disabled={deactiveWeek === week.id}
 													>
-														{deletingWeek === week.id ? (
-															"Removing..."
+														{deactiveWeek === week.id ? (
+															"Deactivating..."
 														) : (
 															<>
 																<X className="mr-2 h-4 w-4" />
-																Remove
+																Deactivate
 															</>
 														)}
 													</Button>
@@ -354,21 +427,111 @@ export default function AdminPage() {
 				</div>
 			)}
 
-			{/* Confirmation Dialog */}
+			{deactivatedWeeks.length > 0 && (
+				<div>
+					<h2 className="mb-4 text-xl font-semibold">Deactivated Weeks</h2>
+					<div className="grid gap-4">
+						{deactivatedWeeks
+							.sort((a, b) => a.week_number - b.week_number)
+							.map((week) => {
+								return (
+									<Card
+										key={week.id}
+										className="border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/10 transition-colors"
+									>
+										<CardContent className="p-6">
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-3">
+													<div className="rounded-full bg-gray-100 dark:bg-gray-900 p-2 text-gray-600 dark:text-gray-400">
+														<Calendar className="h-5 w-5" />
+													</div>
+													<div>
+														<p className="font-medium text-lg">Week {week.week_number}</p>
+														<p className="text-sm text-muted-foreground">
+															{getWeekDateRange(week.week_number, week.year)} • Year {week.year}
+														</p>
+													</div>
+												</div>
+												<div className="flex items-center gap-3">
+													<span className="rounded-full bg-gray-100 dark:bg-gray-900 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-400">
+														Deactivated
+													</span>
+													<Button
+														variant="outline"
+														size="sm"
+														className="bg-blue-100 dark:bg-blue-900 px-3 py-1 text-xs font-medium text-blue-500 dark:text-blue-400"
+														onClick={() => handleActivateWeekClick(week.id, week.week_number)}
+														disabled={activatingWeekId === week.id}
+													>
+														{activatingWeekId === week.id ? (
+															"Activating..."
+														) : (
+															<>
+																<Check className="mr-2 h-4 w-4" />
+																Activate
+															</>
+														)}
+													</Button>
+													<Button
+														variant="outline"
+														size="sm"
+														// className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:border-red-800 dark:hover:bg-red-900/20"
+														onClick={() => handleDeleteWeekClick(week.id, week.week_number)}
+														disabled={deletingWeek === week.id}
+													>
+														{deletingWeek === week.id ? (
+															"Deleting..."
+														) : (
+															<>
+																<X className="mr-2 h-4 w-4" />
+																Delete
+															</>
+														)}
+													</Button>
+												</div>
+											</div>
+										</CardContent>
+									</Card>
+								);
+							})}
+					</div>
+				</div>
+			)}
+
+			{/* Confirmation Dialogs */}
+			<Dialog open={!!confirmDeactivateWeek} onOpenChange={() => setConfirmDeactivateWeek(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Confirm Week Deactivation</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to deactivate Week {confirmDeactivateWeek?.number}?
+						</DialogDescription>
+						<DialogDescription className=" text-sm">
+							This will prevent students from submitting availability for this week, but all data
+							will be preserved.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setConfirmDeactivateWeek(null)}>
+							Cancel
+						</Button>
+						<Button onClick={handleConfirmDeactivate} disabled={!!deactiveWeek}>
+							{deactiveWeek ? "Deactivating..." : "Deactivate Week"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
 			<Dialog open={!!confirmDeleteWeek} onOpenChange={() => setConfirmDeleteWeek(null)}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Confirm Week Removal</DialogTitle>
+						<DialogTitle>Confirm Week Deletion</DialogTitle>
 						<DialogDescription>
-							Are you sure you want to remove Week {confirmDeleteWeek?.number}? This action will:
+							Are you sure you want to delete Week {confirmDeleteWeek?.number}?
 						</DialogDescription>
-						<DialogDescription>
-							{/* Are you sure you want to remove Week {confirmDeleteWeek?.number}? This action will: */}
-							<ul className="list-disc list-inside mt-2 ml-2 space-y-1">
-								<li>Remove the week from availability collection</li>
-								<li>Delete all student submissions for this week</li>
-								<li>This action cannot be undone</li>
-							</ul>
+						<DialogDescription className=" text-sm">
+							This will permanently remove the week and all associated student data. This action
+							cannot be undone.
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
@@ -376,7 +539,34 @@ export default function AdminPage() {
 							Cancel
 						</Button>
 						<Button variant="destructive" onClick={handleConfirmDelete} disabled={!!deletingWeek}>
-							{deletingWeek ? "Removing..." : "Remove Week"}
+							{deletingWeek ? "Deleting..." : "Delete Week"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={!!confirmActivateWeek} onOpenChange={() => setConfirmActivateWeek(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Confirm Week Activation</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to activate Week {confirmActivateWeek?.number}?
+						</DialogDescription>
+						<DialogDescription className=" text-sm">
+							This will make the week available for students to submit their availability.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setConfirmActivateWeek(null)}>
+							Cancel
+						</Button>
+						<Button
+							onClick={handleConfirmActivateWeek}
+							disabled={!!activatingWeekId}
+							className="bg-emerald-600 hover:bg-emerald-700 text-white"
+						>
+							<Check className="mr-2 h-4 w-4" />
+							{activatingWeekId ? "Activating..." : "Activate Week"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

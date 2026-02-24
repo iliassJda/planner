@@ -14,6 +14,38 @@ async function exportAvailability() {
 	return data as Availability[];
 }
 
+async function deactivateWeek(weekId: string) {
+	// First set is_active to false for the week
+	const { data: updatedWeek, error: weekError } = await supabaseAdmin
+		.from("Week")
+		.update({ is_active: false })
+		.eq("id", weekId)
+		.select();
+
+	if (weekError) {
+		console.error("Error deactivating week:", weekError);
+		return null;
+	}
+
+	return updatedWeek as Week[];
+}
+
+async function activateWeek(weekId: string) {
+	// First set is_active to true for the week
+	const { data: updatedWeek, error: weekError } = await supabaseAdmin
+		.from("Week")
+		.update({ is_active: true })
+		.eq("id", weekId)
+		.select();
+
+	if (weekError) {
+		console.error("Error activating week:", weekError);
+		return null;
+	}
+
+	return updatedWeek as Week[];
+}
+
 async function getAllowData(user: User) {
 	const { data, error } = await supabaseAdmin
 		.from("User")
@@ -221,6 +253,19 @@ async function getAllAvailability() {
 	return data as Availability[];
 }
 
+async function getComments() {
+	const { data, error } = await supabaseAdmin
+		.from("Availability")
+		.select("email, week_id, comment");
+
+	if (error) {
+		console.error("Error fetching comments:", error);
+		return [];
+	}
+
+	return data as { email: string; week_id: string; comment: string }[];
+}
+
 export {
 	getAllowData,
 	getTotalStudents,
@@ -236,4 +281,7 @@ export {
 	updateUserStatus,
 	getAllAvailability,
 	exportAvailability,
+	getComments,
+	deactivateWeek,
+	activateWeek,
 };

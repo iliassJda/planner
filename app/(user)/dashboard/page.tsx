@@ -109,6 +109,7 @@ export default function Dashboard() {
 		const availabilityData = await getAvailabilityByEmail(user?.email || "");
 		const activeWeeksData: Week[] = (await getAllWeeks())
 			.filter((week) => !availabilityData.some((a) => a.week_id === week.id))
+			.filter((week) => week.is_active === true)
 			.sort((a, b) => a.week_number - b.week_number);
 
 		setCurrentAvailability(availabilityData);
