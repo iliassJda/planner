@@ -30,6 +30,7 @@ type Availability = {
 	sunday: DayAvailability;
 	hours: number;
 	year: number;
+	comment: string;
 };
 
 export type { User, Week, Availability, DayAvailability };

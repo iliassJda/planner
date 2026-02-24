@@ -13,6 +13,7 @@ import {
 	X,
 	ChevronDown,
 	ChevronUp,
+	MessageSquare,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -95,6 +96,7 @@ export default function Dashboard() {
 	>({});
 	const [weekHours, setWeekHours] = useState<Record<string, number>>({});
 	const [activeWeeks, setActiveWeeks] = useState<Week[]>([]);
+	const [weekComments, setWeekComments] = useState<Record<string, string>>({});
 	const [submittedWeeks, setSubmittedWeeks] = useState<Set<string>>(new Set());
 	const [currentAvailability, setCurrentAvailability] = useState<Availability[]>([]);
 	const [submitting, setSubmitting] = useState<string | null>(null);
@@ -165,6 +167,7 @@ export default function Dashboard() {
 				sunday: weekAvailability.sunday || "not_available",
 				hours: weekHours[weekId] || 0,
 				year: parseInt(weekId.split("-")[0], 10),
+				comment: weekComments[weekId] || "",
 			};
 
 			// console.log("Submitting availability:", availability);
@@ -198,6 +201,7 @@ export default function Dashboard() {
 			},
 		}));
 		setWeekHours((prev) => ({ ...prev, [week.week_id]: week.hours }));
+		setWeekComments((prev) => ({ ...prev, [week.week_id]: week.comment }));
 		setEditingSubmittedWeek(week);
 	};
 
@@ -217,6 +221,7 @@ export default function Dashboard() {
 				saturday: weekAvailability.saturday || "not_available",
 				sunday: weekAvailability.sunday || "not_available",
 				hours: weekHours[editingSubmittedWeek.week_id] || 0,
+				comment: weekComments[editingSubmittedWeek.week_id] || "",
 			};
 
 			await updateAvailability(updatedAvailability);
@@ -503,6 +508,29 @@ export default function Dashboard() {
 																	</div>
 																</div>
 															</div>
+															<div className="border rounded-lg p-4 bg-card">
+																<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
+																	<MessageSquare className="h-5 w-5" />
+																	Additional Comments
+																</h4>
+																<div className="space-y-3">
+																	<label className="block text-sm font-medium text-muted-foreground">
+																		Add any notes or comments about your availability
+																	</label>
+																	<textarea
+																		value={weekComments[week.id] || ""}
+																		onChange={(e) =>
+																			setWeekComments((prev) => ({
+																				...prev,
+																				[week.id]: e.target.value,
+																			}))
+																		}
+																		placeholder="e.g., I'm available mornings only, prefer Tuesday..."
+																		className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+																		rows={3}
+																	/>
+																</div>
+															</div>
 															<div className="grid gap-1.5">
 																<Button
 																	size="sm"
@@ -613,6 +641,7 @@ export default function Dashboard() {
 																{availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
 																available • {week.hours > 0 && `${week.hours} hours desired • `}(
 																{getWeekDateRange(week.week_number, week.year)})
+																{week.comment && ` • ${week.comment}`}
 															</p>
 														</div>
 													</div>
@@ -808,6 +837,29 @@ export default function Dashboard() {
 											</button>
 										))}
 									</div>
+								</div>
+							</div>
+							<div className="border rounded-lg p-4 bg-card">
+								<h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
+									<MessageSquare className="h-5 w-5" />
+									Additional Comments
+								</h4>
+								<div className="space-y-3">
+									<label className="block text-sm font-medium text-muted-foreground">
+										Add any notes or comments about your availability
+									</label>
+									<textarea
+										value={weekComments[editingSubmittedWeek.week_id] || ""}
+										onChange={(e) =>
+											setWeekComments((prev) => ({
+												...prev,
+												[editingSubmittedWeek.week_id]: e.target.value,
+											}))
+										}
+										placeholder="e.g., I'm available mornings only, prefer Tuesday..."
+										className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+										rows={3}
+									/>
 								</div>
 							</div>
 							<div className="grid gap-1.5">
