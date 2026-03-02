@@ -68,7 +68,7 @@ export default function Home() {
 			{/* Footer */}
 			<footer className="border-t px-6 py-6 text-center text-sm text-muted-foreground md:px-10">
 				{/* <p>© 2026 Neuhaus Planner. All rights reserved.</p> */}
-				<p>Designed and implemented by Iliass Jdaoudi & Adam Amor</p>
+				<p>Designed and implemented by Iliass Jdaoudi</p>
 			</footer>
 		</div>
 	);
