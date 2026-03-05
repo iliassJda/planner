@@ -645,6 +645,10 @@ export default function DataPage() {
 																			comments[entry.user.email][
 																				entry.days[format(weekDays[0], "yyyy-MM-dd")]?.week_id
 																			]}
+																		{comments[entry.user.email]?.[
+																			entry.days[format(weekDays[0], "yyyy-MM-dd")]?.week_id
+																		] && " • "}
+																		{entry.days[format(weekDays[0], "yyyy-MM-dd")]?.hours}h
 																	</p>
 																</div>
 															</div>
@@ -691,11 +695,11 @@ export default function DataPage() {
 																		>
 																			{style.short}
 																		</span>
-																		{dayData.hours > 0 && (
+																		{/* {dayData.hours > 0 && (
 																			<span className="text-[8px] sm:text-xs text-muted-foreground">
 																				{dayData.hours}h
 																			</span>
-																		)}
+																		)} */}
 																	</div>
 																</td>
 															);
