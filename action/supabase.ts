@@ -225,11 +225,22 @@ async function updateUserPermissions(email: string, admin: boolean) {
 }
 
 async function updateUserStatus(email: string, allowed: boolean) {
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.update({ allowed })
-		.eq("email", email)
-		.select();
+	const { data: userData } = await supabaseAdmin.from("User").select("allowed").eq("email", email);
+
+	console.log("this is the data -> ", userData);
+
+	if (!userData) return null;
+
+	const value = userData[0].allowed;
+
+	const { data, error } = allowed
+		? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+		: value
+			? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+			: await supabaseAdmin.from("User").delete().eq("email", email).select();
+	// const { data, error } = allowed
+	// 	? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+	// 	: await supabaseAdmin.from("User").delete().eq("email", email).select();
 
 	if (error) {
 		console.error("Error updating user status:", error);
@@ -237,6 +248,24 @@ async function updateUserStatus(email: string, allowed: boolean) {
 	}
 
 	return data as User[];
+
+	// return data as User[];
+	// if (allowed) {
+	// 	const { data, error } = await supabaseAdmin
+	// 		.from("User")
+	// 		.update({ allowed })
+	// 		.eq("email", email)
+	// 		.select();
+	// 	if (error) {
+	// 		console.error("Error updating user status:", error);
+	// 		return null;
+	// 	}
+
+	// 	return data as User[];
+	// } else {
+	// 	const { data, error } = await supabaseAdmin.from("User").delete().eq("email", email).select();
+
+	// }
 }
 
 async function getAllAvailability() {
