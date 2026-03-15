@@ -24,7 +24,7 @@ import {
 	MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
-import { User } from "@/types";
+import { RoleName, User } from "@/types";
 import { getAllUsers, updateUserPermissions, updateUserStatus } from "@/action/supabase";
 import UserSkeleton from "@/components/user-skeleton";
 
@@ -67,12 +67,14 @@ export default function AllUsersPage() {
 		}
 	};
 
-	const handleUpdateUserPermissions = async (email: string, admin: boolean) => {
+	const handleUpdateUserPermissions = async (email: string, role: RoleName) => {
 		setUpdatingUser(email);
 		try {
-			const result = await updateUserPermissions(email, admin);
+			const result = await updateUserPermissions(email, role);
 			if (result) {
-				toast.success(`User ${admin ? "promoted to" : "removed from"} admin successfully`);
+				toast.success(
+					`User ${role == "admin" ? "promoted to" : "removed from"} admin successfully`,
+				);
 				await fetchUsers();
 			} else {
 				toast.error("Failed to update user permissions");
@@ -99,10 +101,10 @@ export default function AllUsersPage() {
 				await handleUpdateUserStatus(user.email, false);
 				break;
 			case "makeAdmin":
-				await handleUpdateUserPermissions(user.email, true);
+				await handleUpdateUserPermissions(user.email, "admin");
 				break;
 			case "removeAdmin":
-				await handleUpdateUserPermissions(user.email, false);
+				await handleUpdateUserPermissions(user.email, "user");
 				break;
 		}
 	};
@@ -124,8 +126,9 @@ export default function AllUsersPage() {
 
 	const pendingUsers = users.filter((user) => !user.allowed);
 	const activeUsers = users.filter((user) => user.allowed);
-	const adminUsers = activeUsers.filter((user) => user.admin);
-	const regularUsers = activeUsers.filter((user) => !user.admin);
+	// console.log("All the active users: ", activeUsers);
+	const adminUsers = activeUsers.filter((user) => user.role == "admin");
+	const regularUsers = activeUsers.filter((user) => user.role == "user");
 
 	// console.log("All users:", users);
 

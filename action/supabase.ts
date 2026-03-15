@@ -87,17 +87,36 @@ async function getAllowData(user: User) {
 	};
 }
 
+// async function getAllUsers() {
+// 	const { data, error } = await supabaseAdmin.from("User").select("*");
+
+// 	if (error) {
+// 		console.error("Error fetching users:", error);
+// 		return [];
+// 	}
+
+// 	// console.log("Fetched users:", data);
+
+// 	return data as User[];
+// }
+
 async function getAllUsers() {
-	const { data, error } = await supabaseAdmin.from("User").select("*");
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.select("email, first_name, image, allowed, roles!inner(name)");
 
 	if (error) {
 		console.error("Error fetching users:", error);
 		return [];
 	}
 
-	// console.log("Fetched users:", data);
-
-	return data as User[];
+	return data.map((user) => ({
+		email: user.email,
+		first_name: user.first_name,
+		image: user.image,
+		allowed: user.allowed,
+		role: (user.roles as unknown as { name: RoleName }).name,
+	})) as User[];
 }
 
 async function getTotalStudents() {
@@ -234,10 +253,22 @@ async function deleteWeek(weekId: string) {
 	return data as Week[];
 }
 
-async function updateUserPermissions(email: string, admin: boolean) {
+async function updateUserPermissions(email: string, role: RoleName) {
+	console.log("This is the current role: ", role);
+	const { data: roleData, error: roleError } = await supabaseAdmin
+		.from("roles")
+		.select("id")
+		.eq("name", role)
+		.maybeSingle(); // <-- IMPORTANT
+
+	if (roleError || !roleData) {
+		console.error("Error fetching role:", roleError);
+		return null;
+	}
+
 	const { data, error } = await supabaseAdmin
 		.from("User")
-		.update({ admin })
+		.update({ role_id: roleData.id })
 		.eq("email", email)
 		.select();
 
