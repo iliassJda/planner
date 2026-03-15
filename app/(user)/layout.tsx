@@ -36,7 +36,8 @@ export default async function RootLayout({
 		email: session.user.email as string,
 		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
-		admin: false,
+		role: "user",
+		// admin: false,
 		// allowed: false,
 	};
 	// This gets the data to check whether the user is allowed on the website by checking the
@@ -47,9 +48,11 @@ export default async function RootLayout({
 		return Restricted({ user });
 	}
 
+	// const roles = data.roles;
+
 	// user.allowed = true;
 
-	if (data.admin) {
+	if (data.role === "admin") {
 		redirect("/admin");
 	}
 

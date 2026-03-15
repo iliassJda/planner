@@ -34,18 +34,18 @@ export default async function RootLayout({
 		email: session.user.email as string,
 		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
-		admin: false,
+		role: "user",
 	};
 	// console.log(user);
 	// This gets the data to check whether the user is allowed on the website by checking the
 	// allowed column in supabase
 	const data = await getAllowData(user);
 
-	if (data == null || !data.admin) {
+	if (data == null || data.role !== "admin") {
 		return Restricted({ user });
 	}
 
-	user.admin = true;
+	user.role = "admin";
 
 	//Check for admin !
 

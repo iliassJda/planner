@@ -2,9 +2,12 @@ type User = {
 	first_name: string;
 	email: string;
 	image: string;
-	admin: boolean;
+	// admin: boolean;
+	role: RoleName;
 	allowed?: boolean;
 };
+
+type RoleName = "admin" | "user";
 
 type Week = {
 	id: string;
@@ -33,4 +36,4 @@ type Availability = {
 	comment: string;
 };
 
-export type { User, Week, Availability, DayAvailability };
+export type { User, RoleName, Week, Availability, DayAvailability };

@@ -45,7 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					</SidebarMenuItem>
 				</SidebarMenu>
 			</SidebarHeader>
-			<Content admin={user.admin} />
+			<Content role={user.role} />
 			<SidebarFooter>
 				<NavUser user={user} />
 			</SidebarFooter>

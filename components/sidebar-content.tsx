@@ -6,14 +6,15 @@ import {
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { userData, adminData } from "@/lib/sidebar_data";
+import { RoleName } from "@/types";
 
-export default function Content({ admin }: { admin: boolean }) {
+export default function Content({ role }: { role: RoleName }) {
 	// console.log("This is the admin boolean = ", admin);
 	return (
 		<SidebarContent>
 			<SidebarGroup>
 				<SidebarMenu>
-					{admin
+					{role == "admin"
 						? adminData.navMain.map((item) => (
 								<SidebarMenuItem key={item.title}>
 									<SidebarMenuButton asChild>
