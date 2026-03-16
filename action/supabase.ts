@@ -254,7 +254,7 @@ async function deleteWeek(weekId: string) {
 }
 
 async function updateUserPermissions(email: string, role: RoleName) {
-	console.log("This is the current role: ", role);
+	// console.log("This is the current role: ", role);
 	const { data: roleData, error: roleError } = await supabaseAdmin
 		.from("roles")
 		.select("id")
@@ -283,7 +283,7 @@ async function updateUserPermissions(email: string, role: RoleName) {
 async function updateUserStatus(email: string, allowed: boolean) {
 	const { data: userData } = await supabaseAdmin.from("User").select("allowed").eq("email", email);
 
-	console.log("this is the data -> ", userData);
+	// console.log("this is the data -> ", userData);
 
 	if (!userData) return null;
 

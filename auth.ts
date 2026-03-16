@@ -25,7 +25,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 				.single();
 			// const { data: test, error: err } = await supabase.from("User").select("*");
 
-			// console.log("This is a test", existingUser);
+			console.log("This is a test", existingUser);
 
 			// If query fails with "No rows" that's okay — means not found
 			if (error && error.code != "PGRST116") {
@@ -34,17 +34,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 			}
 			const userFirstName = user?.name?.split(" ")[0];
 
+			const { data: roleData, error: roleError } = await supabaseAdmin
+				.from("roles")
+				.select("id")
+				.eq("name", "user")
+				.maybeSingle(); // <-- IMPORTANT
+
+			if (roleError || !roleData) {
+				console.error("Error fetching role:", roleError);
+				return null;
+			}
+
+			console.log("This is the ID: ", roleData.id);
+
 			// console.log("First name is " + userFirstName);
 
 			// 2. If no existing user, insert a new one
 			if (!existingUser) {
-				await supabase.from("User").insert({
+				const { data: userData, error: userError } = await supabase.from("User").insert({
 					first_name: userFirstName,
 					email,
 					allowed: false,
-					admin: false,
+					role_id: roleData.id,
 					image: user.image,
 				});
+				console.log("This is the result: ", userData, " Or this is the error: ", userError);
 			} else {
 				// console.log("user " + user.email + " already exists in the database so not added");
 			}

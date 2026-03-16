@@ -14,12 +14,16 @@ const adminData = {
 			url: "/admin",
 		},
 		{
-			title: "All users",
+			title: "User Management",
 			url: "/admin/all-users",
 		},
 		{
-			title: "Data",
+			title: "Availability Overview",
 			url: "/admin/data",
+		},
+		{
+			title: "Planning Maker",
+			url: "/admin/maker",
 		},
 	],
 };

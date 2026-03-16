@@ -212,7 +212,7 @@ export default function DataPage() {
 				// console.log("These are the comments: ", commentsMap[comment.email]);
 			});
 			setComments(commentsMap);
-			console.log("Fetched comments:", commentsMap);
+			// console.log("Fetched comments:", commentsMap);
 			setLoading(false);
 		} catch (error) {
 			console.error("Error fetching data:", error);
