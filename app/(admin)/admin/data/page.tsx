@@ -654,7 +654,7 @@ export default function DataPage() {
 																		{getInitials(entry.user.first_name)}
 																	</AvatarFallback>
 																</Avatar>
-																<div className="min-w-0 flex-1">
+																<div className="min-w-0 flex-1 max-w-xs">
 																	<p className="text-xs sm:text-sm font-medium truncate">
 																		{entry.user.first_name}
 																	</p>
