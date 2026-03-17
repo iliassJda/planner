@@ -776,11 +776,13 @@ export default function DataPage() {
 																		const comment = weekId && comments[entry.user.email]?.[weekId];
 																		const hours = firstDayData?.hours;
 																		return (
-																			<p className="text-[9px] sm:text-xs text-muted-foreground whitespace-normal break-words">
-																				{comment}
-																				{comment && hours != null && hours > 0 && " • "}
-																				{hours != null && hours > 0 && `${hours}h`}
-																			</p>
+																			<div className="max-w-40 w-36 min-w-0 border border-amber-300">
+																				<p className="text-[9px] sm:text-xs text-muted-foreground break-words">
+																					{comment}
+																					{comment && hours != null && hours > 0 && " • "}
+																					{hours != null && hours > 0 && `${hours}h`}
+																				</p>
+																			</div>
 																		);
 																	})()}
 																</div>
