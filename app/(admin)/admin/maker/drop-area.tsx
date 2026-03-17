@@ -1,28 +1,37 @@
 "use client";
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { fileToText } from "@/action/file";
+import { toast } from "sonner";
+import { Upload, CheckCircle, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export default function DropArea() {
+interface DropAreaProps {
+	onFileUpload?: (file: File) => void;
+}
+
+export default function DropArea({ onFileUpload }: DropAreaProps) {
 	const [file, setFile] = useState<File | null>(null);
-	const [text, setText] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
 
-	const onDrop = useCallback(async (acceptedFiles: File[]) => {
-		if (acceptedFiles) {
-			const selectedFile = acceptedFiles[0];
-			setFile(selectedFile);
-			setIsLoading(true);
-			try {
-				const fileText = await fileToText(selectedFile);
-				setText(fileText);
-			} catch (error) {
-				console.error("Error reading file:", error);
-			} finally {
-				setIsLoading(false);
+	const onDrop = useCallback(
+		async (acceptedFiles: File[]) => {
+			if (acceptedFiles) {
+				setIsLoading(true);
+				try {
+					const selectedFile = acceptedFiles[0];
+					setFile(selectedFile);
+					onFileUpload?.(selectedFile);
+					toast.success(selectedFile.name + " was uploaded successfully");
+				} catch (error) {
+					console.error("Error reading file:", error);
+					toast.error("There was an error, please try again");
+				} finally {
+					setIsLoading(false);
+				}
 			}
-		}
-	}, []);
+		},
+		[onFileUpload],
+	);
 
 	const { getRootProps, getInputProps, isDragActive } = useDropzone({
 		onDrop,
@@ -31,46 +40,63 @@ export default function DropArea() {
 		},
 	});
 
-	return file ? (
-		<div className="space-y-4">
-			<div className="bg-green-50 border border-green-200 rounded-lg p-4">
-				<h2 className="font-semibold text-green-900 mb-2">✓ File uploaded: {file.name}</h2>
-				{isLoading ? (
-					<p className="text-sm text-muted-foreground">Loading file contents...</p>
-				) : text ? (
-					<div className="bg-white rounded border border-green-200 p-3 max-h-96 overflow-y-auto">
-						<pre className="text-xs whitespace-pre-wrap break-words font-mono text-gray-700">
-							{text}
-						</pre>
+	if (file) {
+		return (
+			<div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border-2 border-green-300 dark:border-green-700 rounded-xl p-8">
+				<div className="flex items-center justify-between mb-4">
+					<div className="flex items-center gap-3">
+						<CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+						<div>
+							<h3 className="font-semibold text-green-900 dark:text-green-100">File Uploaded</h3>
+							<p className="text-sm text-green-700 dark:text-green-300">{file.name}</p>
+						</div>
 					</div>
-				) : (
-					<p className="text-sm text-red-600">Error loading file contents</p>
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={() => setFile(null)}
+						className="text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-900"
+					>
+						<X className="w-5 h-5" />
+					</Button>
+				</div>
+				{isLoading && (
+					<p className="text-sm text-green-700 dark:text-green-300">Processing file...</p>
 				)}
 			</div>
-			<button
-				onClick={() => {
-					setFile(null);
-					setText(null);
-				}}
-				className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-			>
-				Upload Another File
-			</button>
-		</div>
-	) : (
+		);
+	}
+
+	return (
 		<div
 			{...getRootProps()}
-			className={`border-4 border-dashed rounded-xl p-32 text-center cursor-pointer transition-colors min-h-screen flex flex-col items-center justify-center ${
-				isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+			className={`relative overflow-hidden rounded-xl p-16 text-center cursor-pointer transition-all duration-300 min-h-96 flex flex-col items-center justify-center ${
+				isDragActive
+					? " border-primary bg-primary/15 scale-105"
+					: " border-dashed border-border bg-gradient-to-br from-secondary to-secondary/50 hover:border-primary hover:from-primary/5 hover:to-secondary/50"
 			}`}
 		>
 			<input {...getInputProps()} />
+
+			{/* <div className={`transition-all duration-300 ${isDragActive ? "scale-110" : "scale-100"}`}>
+				<Upload
+					className={`w-16 h-16 mx-auto mb-4 ${isDragActive ? "text-primary" : "text-muted-foreground"}`}
+				/>
+			</div> */}
+
 			{isDragActive ? (
-				<p className="text-4xl font-bold text-blue-600">Drop the files here 👇</p>
+				<div>
+					<p className="text-2xl font-bold text-primary">Drop your CSV file here</p>
+					<p className="text-sm text-muted-foreground mt-2">Release to upload</p>
+				</div>
 			) : (
-				<p className="text-3xl font-semibold text-gray-600">
-					Drag & drop CSV files here, or click to select
-				</p>
+				<div>
+					<p className="text-2xl font-bold text-foreground mb-2">Drag & drop your CSV file here</p>
+					<p className="text-sm text-muted-foreground mb-6">or click to browse your computer</p>
+					<div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-background/50 px-4 py-2 rounded-lg w-fit mx-auto">
+						<span>✓ CSV files only</span>
+					</div>
+				</div>
 			)}
 		</div>
 	);
