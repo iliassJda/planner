@@ -14,6 +14,13 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAllWeeks, getAllAvailability, getAllUsers } from "@/action/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +50,7 @@ import {
 	RefreshCw,
 	Download,
 	Printer,
+	Plus,
 } from "lucide-react";
 
 import { Availability, User, Week, DayAvailability } from "@/types";
@@ -63,9 +71,15 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 	const [weeks, setWeeks] = useState<Week[]>([]);
 	const [availabilityData, setAvailabilityData] = useState<Availability[]>([]);
 	const [users, setUsers] = useState<User[]>([]);
-	const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
-		startOfWeek(new Date(), { weekStartsOn: 1 }),
-	);
+	const [dialogOpen, setDialogOpen] = useState(false);
+	const [selectedStudent, setSelectedStudent] = useState<{
+		user: User;
+		days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
+	} | null>(null);
+	const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+	// const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
+	// 	startOfWeek(new Date(), { weekStartsOn: 1 }),
+	// );
 
 	const getWeeklyAvailability = (week_label: string) => {
 		const correctWeek = weeks.find((week) => week.week_label === week_label);
@@ -112,6 +126,12 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 		// console.log("This is the studentResult => ", studentResult);
 
 		return { weekDays, weekStudents: studentResult };
+	};
+
+	const handleCellClick = (student: typeof selectedStudent, day: Date) => {
+		setSelectedStudent(student);
+		setSelectedDay(day);
+		setDialogOpen(true);
 	};
 
 	useEffect(() => {
@@ -265,52 +285,15 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 														</td>
 														{weekDays.map((day) => {
 															const dayKey = format(day, "yyyy-MM-dd");
-															const dayData = entry.days[dayKey];
-
-															if (!dayData) {
-																return (
-																	<td
-																		key={dayKey}
-																		className="border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0"
-																	>
-																		<span className="text-[9px] sm:text-xs text-muted-foreground">
-																			N/A
-																		</span>
-																	</td>
-																);
-															}
-
-															const style = AVAILABILITY_STYLES[dayData.availability];
-															const Icon = style.icon;
 															return (
 																<td
 																	key={dayKey}
-																	className={cn(
-																		"border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0",
-																		dayData.availability === "whole_day" &&
-																			"bg-green-100 dark:bg-green-900/20",
-																		dayData.availability === "morning" &&
-																			"bg-amber-100 dark:bg-amber-900/20",
-																		dayData.availability === "afternoon" &&
-																			"bg-blue-100 dark:bg-blue-900/20",
-																	)}
+																	onClick={() => handleCellClick(entry, day)}
+																	className="border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
 																>
-																	<div className="flex flex-col items-center justify-center gap-0.5 h-full">
-																		<Icon className={cn("h-3 w-3 sm:h-4 sm:w-4", style.color)} />
-																		<span
-																			className={cn(
-																				"text-[9px] sm:text-xs font-medium",
-																				style.color,
-																			)}
-																		>
-																			{style.short}
-																		</span>
-																		{/* {dayData.hours > 0 && (
-                                                                                                                                    <span className="text-[8px] sm:text-xs text-muted-foreground">
-                                                                                                                                        {dayData.hours}h
-                                                                                                                                    </span>
-                                                                                                                                )} */}
-																	</div>
+																	<span className="text-[9px] sm:text-xs text-muted-foreground">
+																		+
+																	</span>
 																</td>
 															);
 														})}
@@ -432,6 +415,55 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 					</CardContent>
 				</Card>
 			) : null}
+
+			{/* Cell Dialog */}
+			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+				<DialogContent className="max-w-md">
+					<DialogHeader>
+						<DialogTitle>
+							{selectedStudent?.user.first_name} -{" "}
+							{selectedDay ? format(selectedDay, "EEEE, MMMM d, yyyy") : ""}
+						</DialogTitle>
+						<DialogDescription>
+							Add or edit shift information for this student on this day
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="space-y-4 py-4">
+						<div className="flex items-center gap-3 pb-4 border-b">
+							<Avatar className="h-10 w-10">
+								<AvatarImage
+									src={selectedStudent?.user.image}
+									alt={selectedStudent?.user.first_name}
+									referrerPolicy="no-referrer"
+								/>
+								<AvatarFallback className="text-sm">
+									{getInitials(selectedStudent?.user.first_name || "")}
+								</AvatarFallback>
+							</Avatar>
+							<div>
+								<p className="font-medium">{selectedStudent?.user.first_name}</p>
+								<p className="text-sm text-muted-foreground">{selectedStudent?.user.email}</p>
+							</div>
+						</div>
+
+						<div className="space-y-2">
+							<h4 className="text-sm font-semibold">Add Shift</h4>
+							<p className="text-sm text-muted-foreground">
+								Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
+							</p>
+							{/* TODO: Add shift configuration form here */}
+						</div>
+					</div>
+
+					<div className="flex gap-2 justify-end">
+						<Button variant="outline" onClick={() => setDialogOpen(false)}>
+							Cancel
+						</Button>
+						<Button>Save Shift</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
