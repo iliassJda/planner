@@ -1,6 +1,6 @@
 "use server";
 
-import { Availability, RoleName, User, Week } from "@/types";
+import { Availability, RoleName, User, Week, Store } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
 const ROLE_NAMES: RoleName[] = ["admin", "user"];
@@ -339,6 +339,16 @@ async function updateUserStatus(email: string, allowed: boolean) {
   // }
 }
 
+async function getAllStoresFromRegion(region: string) {
+  const { data, error } = await supabaseAdmin.from("store").select("*").eq("region", region);
+
+  if (error) {
+    console.error("Error fetching stores from ", region, " :", error);
+  }
+
+  return data as Store[];
+}
+
 async function getAllAvailability() {
   const { data, error } = await supabaseAdmin
     .from("Availability")
@@ -423,4 +433,5 @@ export {
   deactivateWeek,
   activateWeek,
   getCsvAvailabilities,
+  getAllStoresFromRegion,
 };

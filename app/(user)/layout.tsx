@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { User } from "@/types";
+import { User, Region } from "@/types";
 import { redirect } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -37,14 +37,13 @@ export default async function RootLayout({
     first_name: session.user.name?.split(" ")[0] as string,
     image: session.user.image as string,
     role: "user",
+    region: { id: 1, name: "Bruxelles" } as Region, // Region is hardcoded for now but should not be
     // admin: false,
     // allowed: false,
   };
   // This gets the data to check whether the user is allowed on the website by checking the
   // allowed column in supabase
   const data = await getAllowData(user);
-
-  console.log("THIS is the data", data);
 
   if (data == null) {
     return Restricted({ user });
