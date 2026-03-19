@@ -4,6 +4,7 @@ type User = {
 	image: string;
 	// admin: boolean;
 	role: RoleName;
+	region: Region;
 	allowed?: boolean;
 };
 
@@ -36,4 +37,15 @@ type Availability = {
 	comment: string;
 };
 
-export type { User, RoleName, Week, Availability, DayAvailability };
+type Region = {
+	id: number;
+	name: string;
+};
+
+type Store = {
+	id: number;
+	name: string;
+	region: Region;
+};
+
+export type { User, RoleName, Week, Availability, DayAvailability, Store, Region };

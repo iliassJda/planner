@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { User } from "@/types";
+import { Region, User } from "@/types";
 import { redirect } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -35,6 +35,7 @@ export default async function RootLayout({
 		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
 		role: "student",
+		region: { id: 1, name: "Bruxelles" } as Region, // Region is hardcoded for now but should not be
 	};
 	// console.log(user);
 	// This gets the data to check whether the user is allowed on the website by checking the
