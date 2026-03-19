@@ -349,6 +349,16 @@ async function getAllStoresFromRegion(region: string) {
 	return data as Store[];
 }
 
+async function getAllStoresFromRegion(region: string) {
+	const { data, error } = await supabaseAdmin.from("store").select("*").eq("region", region);
+
+	if (error) {
+		console.error("Error fetching stores from ", region, " :", error);
+	}
+
+	return data as Store[];
+}
+
 async function getAllAvailability() {
 	const { data, error } = await supabaseAdmin
 		.from("Availability")
