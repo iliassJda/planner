@@ -262,24 +262,25 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 																	<p className="text-xs sm:text-sm font-medium truncate">
 																		{entry.user.first_name}
 																	</p>
-																	{/* {(() => {
+																	{/* <p className=""></p> */}
+																	{(() => {
 																		const firstDay = weekDays.find(
 																			(d) => entry.days[format(d, "yyyy-MM-dd")],
 																		);
 																		const firstDayData = firstDay
 																			? entry.days[format(firstDay, "yyyy-MM-dd")]
 																			: undefined;
-																		const weekId = firstDayData?.week_id;
-																		const comment = weekId && comments[entry.user.email]?.[weekId];
+																		// const weekId = firstDayData?.week_id;
+																		// const comment = weekId && comments[entry.user.email]?.[weekId];
 																		const hours = firstDayData?.hours;
 																		return (
 																			<p className="text-[9px] sm:text-xs text-muted-foreground truncate line-clamp-1">
-																				{comment}
-																				{comment && hours != null && hours > 0 && " • "}
+																				{/* {comment}
+																				{comment && hours != null && hours > 0 && " • "} */}
 																				{hours != null && hours > 0 && `${hours}h`}
 																			</p>
 																		);
-																	})()} */}
+																	})()}
 																</div>
 															</div>
 														</td>
