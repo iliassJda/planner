@@ -65,6 +65,7 @@ import {
   Download,
   Printer,
   Plus,
+  Save,
 } from "lucide-react";
 
 import { Availability, User, Week, DayAvailability, Store } from "@/types";
@@ -86,6 +87,8 @@ type ShiftAssignment = {
   end: string;
   hours: number;
 };
+
+const SHIFTS_STORAGE_KEY = "weekly-planner-assigned-shifts-v1";
 
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
   const totalMinutes = 9 * 60 + index * 15;
@@ -116,6 +119,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
   const [assignedShifts, setAssignedShifts] = useState<
     Record<string, Record<string, ShiftAssignment>>
   >({});
+  const [saveMessage, setSaveMessage] = useState<string>("");
   // const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
   // 	startOfWeek(new Date(), { weekStartsOn: 1 }),
   // );
@@ -237,6 +241,24 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
     setDialogOpen(false);
   };
 
+  const hasAssignedShifts = Object.values(assignedShifts).some(
+    (studentShifts) => Object.keys(studentShifts).length > 0,
+  );
+
+  const handleSaveAllShifts = () => {
+    if (!hasAssignedShifts) {
+      setSaveMessage("No shifts to save yet.");
+      return;
+    }
+
+    // try {
+    //   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(assignedShifts));
+    //   setSaveMessage(`Saved ${Object.keys(assignedShifts).length} student schedules.`);
+    // } catch {
+    //   setSaveMessage("Could not save shifts in this browser.");
+    // }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       if (!user) {
@@ -269,7 +291,27 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
     fetchData();
   }, [file, user]);
 
+  // useEffect(() => {
+  //   try {
+  //     const savedShifts = localStorage.getItem(SHIFTS_STORAGE_KEY);
+  //     if (savedShifts) {
+  //       setAssignedShifts(
+  //         JSON.parse(savedShifts) as Record<string, Record<string, ShiftAssignment>>,
+  //       );
+  //     }
+  //   } catch {
+  //     setSaveMessage("Could not load previously saved shifts.");
+  //   }
+  // }, []);
+
   const selectedDayKey = selectedDay ? format(selectedDay, "yyyy-MM-dd") : null;
+  const selectedDayAvailability = selectedDayKey
+    ? selectedStudent?.days[selectedDayKey]?.availability
+    : undefined;
+  const dialogDayAvailability: DayAvailability = selectedDayAvailability ?? "not_available";
+  const dialogAvailabilityStyle = AVAILABILITY_STYLES[dialogDayAvailability];
+  const isSelectedDayUnavailable =
+    !selectedDayAvailability || selectedDayAvailability === "not_available";
   const selectedWeekIdFromDay = selectedDayKey
     ? selectedStudent?.days[selectedDayKey]?.week_id
     : undefined;
@@ -291,7 +333,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 
   return (
     <div>
-      <div className="pb-4">
+      <div className="pb-4 flex flex-wrap items-center gap-2">
         {isLoadingWeeks ? (
           <div className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -320,6 +362,13 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
         ) : (
           <div>No available weeks</div>
         )}
+
+        <Button variant="secondary" onClick={handleSaveAllShifts} disabled={!hasAssignedShifts}>
+          <Save className="mr-2 h-4 w-4" />
+          Save All Shifts
+        </Button>
+
+        {saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
       </div>
       {currentWeek != "null" ? (
         <Card>
@@ -406,13 +455,17 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
                                       entry.user.email,
                                       weekDays,
                                     );
+                                    // const partOfDay = firstDayData?.availability;
                                     return (
-                                      <p className="text-[9px] sm:text-xs text-muted-foreground truncate line-clamp-1">
-                                        assigned {assignedHours}h
-                                        {targetHours != null && targetHours > 0
-                                          ? ` / ${targetHours}h target`
-                                          : ""}
-                                      </p>
+                                      <div>
+                                        {/* <p>{partOfDay}</p> */}
+                                        <p className="text-[9px] sm:text-xs text-muted-foreground truncate line-clamp-1">
+                                          assigned {assignedHours}h
+                                          {targetHours != null && targetHours > 0
+                                            ? ` / ${targetHours}h target`
+                                            : ""}
+                                        </p>
+                                      </div>
                                     );
                                   })()}
                                 </div>
@@ -420,6 +473,13 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
                             </td>
                             {weekDays.map((day) => {
                               const dayKey = format(day, "yyyy-MM-dd");
+                              const dayAvailability = entry.days[dayKey];
+                              const availabilityStyle = dayAvailability
+                                ? AVAILABILITY_STYLES[dayAvailability.availability]
+                                : null;
+                              const isUnavailableDay =
+                                !dayAvailability ||
+                                dayAvailability.availability === "not_available";
                               const savedShift = assignedShifts[entry.user.email]?.[dayKey];
                               const savedStoreName = savedShift
                                 ? stores.find((store) => store.id.toString() === savedShift.storeId)
@@ -429,10 +489,29 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
                                 <td
                                   key={dayKey}
                                   onClick={() => handleCellClick(entry, day)}
-                                  className="border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                                  className="relative border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
                                 >
+                                  {isUnavailableDay ? (
+                                    <div className="pointer-events-none absolute inset-0 bg-slate-300/35 dark:bg-slate-700/45" />
+                                  ) : null}
+                                  {availabilityStyle ? (
+                                    <div
+                                      className="absolute left-1 top-1 z-10 inline-flex items-center gap-1 rounded-full bg-background/70 px-1.5 py-0.5"
+                                      title={availabilityStyle.label}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "h-1.5 w-1.5 rounded-full opacity-80",
+                                          availabilityStyle.dot,
+                                        )}
+                                      />
+                                      <span className="text-[9px] leading-none text-muted-foreground">
+                                        {availabilityStyle.short}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                   {savedShift ? (
-                                    <div className="flex h-full flex-col items-center justify-center gap-0.5">
+                                    <div className="relative z-10 flex h-full flex-col items-center justify-center gap-0.5">
                                       <span className="text-[10px] sm:text-xs font-medium">
                                         {savedShift.start} - {savedShift.end}
                                       </span>
@@ -446,7 +525,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
                                       ) : null}
                                     </div>
                                   ) : (
-                                    <span className="text-[9px] sm:text-xs text-muted-foreground">
+                                    <span className="relative z-10 text-[9px] sm:text-xs text-muted-foreground">
                                       +
                                     </span>
                                   )}
@@ -466,104 +545,6 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
                         </tr>
                       )}
                     </tbody>
-                    {/* <tbody>
-										{weekStudents.length > 0 ? (
-											weekStudents.map((entry) => (
-												<tr key={entry.user.email} className="hover:bg-muted/50">
-													<td className="sticky left-0 border-b border-r bg-card p-2 sm:p-3 z-10">
-														<div className="flex items-center gap-1.5 sm:gap-2">
-															<Avatar className="h-7 w-7 sm:h-9 sm:w-9 flex-shrink-0">
-																<AvatarImage
-																	src={entry.user.image}
-																	alt={entry.user.first_name}
-																	referrerPolicy="no-referrer"
-																/>
-																<AvatarFallback className="text-[10px] sm:text-sm">
-																	{getInitials(entry.user.first_name)}
-																</AvatarFallback>
-															</Avatar>
-															<div className="min-w-0 flex-1">
-																<p className="text-xs sm:text-sm font-medium truncate">
-																	{entry.user.first_name}
-																</p>
-																{(() => {
-																	const firstDay = weekDays.find(
-																		(d) => entry.days[format(d, "yyyy-MM-dd")],
-																	);
-																	const firstDayData = firstDay
-																		? entry.days[format(firstDay, "yyyy-MM-dd")]
-																		: undefined;
-																	const weekId = firstDayData?.week_id;
-																	const comment = weekId && comments[entry.user.email]?.[weekId];
-																	const hours = firstDayData?.hours;
-																	return (
-																		<p className="text-[9px] sm:text-xs text-muted-foreground truncate line-clamp-1">
-																			{comment}
-																			{comment && hours != null && hours > 0 && " • "}
-																			{hours != null && hours > 0 && `${hours}h`}
-																		</p>
-																	);
-																})()}
-															</div>
-														</div>
-													</td>
-													{weekDays.map((day) => {
-														const dayKey = format(day, "yyyy-MM-dd");
-														const dayData = entry.days[dayKey];
-
-														if (!dayData) {
-															return (
-																<td
-																	key={dayKey}
-																	className="border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0"
-																>
-																	<span className="text-[9px] sm:text-xs text-muted-foreground">
-																		N/A
-																	</span>
-																</td>
-															);
-														}
-
-														const style = AVAILABILITY_STYLES[dayData.availability];
-														const Icon = style.icon;
-														return (
-															<td
-																key={dayKey}
-																className={cn(
-																	"border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0",
-																	dayData.availability === "whole_day" &&
-																		"bg-green-100 dark:bg-green-900/20",
-																	dayData.availability === "morning" &&
-																		"bg-amber-100 dark:bg-amber-900/20",
-																	dayData.availability === "afternoon" &&
-																		"bg-blue-100 dark:bg-blue-900/20",
-																)}
-															>
-																<div className="flex flex-col items-center justify-center gap-0.5 h-full">
-																	<Icon className={cn("h-3 w-3 sm:h-4 sm:w-4", style.color)} />
-																	<span
-																		className={cn("text-[9px] sm:text-xs font-medium", style.color)}
-																	>
-																		{style.short}
-																	</span>
-																	
-																</div>
-															</td>
-														);
-													})}
-												</tr>
-											))
-										) : (
-											<tr>
-												<td
-													colSpan={8}
-													className="border-b p-4 sm:p-8 text-center text-xs sm:text-base text-muted-foreground"
-												>
-													No availabilities for this week
-												</td>
-											</tr>
-										)}
-									</tbody> */}
                   </table>
                 </div>
               );
@@ -581,7 +562,9 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
               {selectedDay ? format(selectedDay, "EEEE, MMMM d, yyyy") : ""}
             </DialogTitle>
             <DialogDescription>
-              Add or edit shift information for this student on this day
+              {isSelectedDayUnavailable
+                ? "This student is not available on this day."
+                : "Add or edit shift information for this student on this day"}
             </DialogDescription>
           </DialogHeader>
 
@@ -610,99 +593,126 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
             </div>
 
             <div className="space-y-2">
-              <h4 className="text-sm font-semibold">Add Shift</h4>
-              <div className="space-y-1">
-                <label htmlFor="shift-store" className="text-xs font-medium text-muted-foreground">
-                  Store
-                </label>
-                <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                  <SelectTrigger id="shift-store" className="w-full">
-                    <SelectValue placeholder="Choose store" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((store) => (
-                      <SelectItem key={store.id} value={store.id.toString()}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-semibold">Add Shift</h4>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                    dialogDayAvailability === "not_available"
+                      ? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"
+                      : "border-border bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", dialogAvailabilityStyle.dot)} />
+                  {dialogAvailabilityStyle.label}
+                </span>
               </div>
-              {/* <p className="text-sm text-muted-foreground">
-                Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
-              </p> */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Start hour</label>
-                  <Select value={shiftStart} onValueChange={setShiftStart}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Quick pick" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SHIFT_TIME_OPTIONS.map((time) => (
-                        <SelectItem key={`start-${time}`} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+
+              {isSelectedDayUnavailable ? (
+                <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                  This user is not available on this day, so no shift can be assigned.
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">End hour</label>
-                  <Select value={shiftEnd} onValueChange={setShiftEnd}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Quick pick" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SHIFT_TIME_OPTIONS.map((time) => (
-                        <SelectItem key={`end-${time}`} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {effectiveIsInvalid ? (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  End hour must be later than start hour.
-                </p>
-              ) : null}
-              {customShiftStart && !validateTimeFormat(customShiftStart) ? (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  Start time must be in HH:MM format.
-                </p>
-              ) : null}
-              {customShiftEnd && !validateTimeFormat(customShiftEnd) ? (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  End time must be in HH:MM format.
-                </p>
-              ) : null}
-              {!selectedStoreId ? (
-                <p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
-              ) : null}
-              {/* {selectedStoreName ? (
-                <p className="text-xs text-muted-foreground">Selected store: {selectedStoreName}</p>
-              ) : null} */}
-              {/* <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
-                    {currentWeek != "null" ? currentWeek : "Choose week"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Select Week</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
-                      {weeks.map((week) => (
-                        <DropdownMenuRadioItem key={week.id} value={week.week_label}>
-                          {week.week_label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu> */}
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="shift-store"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Store
+                    </label>
+                    <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                      <SelectTrigger id="shift-store" className="w-full">
+                        <SelectValue placeholder="Choose store" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stores.map((store) => (
+                          <SelectItem key={store.id} value={store.id.toString()}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* <p className="text-sm text-muted-foreground">
+                  Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
+                </p> */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Start hour
+                      </label>
+                      <Select value={shiftStart} onValueChange={setShiftStart}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Quick pick" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SHIFT_TIME_OPTIONS.map((time) => (
+                            <SelectItem key={`start-${time}`} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">End hour</label>
+                      <Select value={shiftEnd} onValueChange={setShiftEnd}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Quick pick" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SHIFT_TIME_OPTIONS.map((time) => (
+                            <SelectItem key={`end-${time}`} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {effectiveIsInvalid ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      End hour must be later than start hour.
+                    </p>
+                  ) : null}
+                  {customShiftStart && !validateTimeFormat(customShiftStart) ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Start time must be in HH:MM format.
+                    </p>
+                  ) : null}
+                  {customShiftEnd && !validateTimeFormat(customShiftEnd) ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      End time must be in HH:MM format.
+                    </p>
+                  ) : null}
+                  {!selectedStoreId ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
+                  ) : null}
+                  {/* {selectedStoreName ? (
+                  <p className="text-xs text-muted-foreground">Selected store: {selectedStoreName}</p>
+                ) : null} */}
+                  {/* <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                      {currentWeek != "null" ? currentWeek : "Choose week"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Select Week</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
+                        {weeks.map((week) => (
+                          <DropdownMenuRadioItem key={week.id} value={week.week_label}>
+                            {week.week_label}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu> */}
+                </>
+              )}
             </div>
           </div>
 
@@ -710,7 +720,10 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveShift} disabled={effectiveIsInvalid || !selectedStoreId}>
+            <Button
+              onClick={handleSaveShift}
+              disabled={isSelectedDayUnavailable || effectiveIsInvalid || !selectedStoreId}
+            >
               Save Shift
             </Button>
           </div>

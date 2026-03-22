@@ -29,7 +29,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       // If query fails with "No rows" that's okay — means not found
       if (error && error.code != "PGRST116") {
-        // console.log("Supabase error:", error);
+        console.error("Supabase error:", error);
         return false;
       }
       const userFirstName = user?.name?.split(" ")[0];
@@ -51,15 +51,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       // 2. If no existing user, insert a new one
       if (!existingUser) {
-        // const { data: userData, error: userError }
-        await supabase.from("User").insert({
+        const { data: userData, error: userError } = await supabase.from("User").insert({
           first_name: userFirstName,
-          email,
+          email: email,
           allowed: false,
           role_name: "user",
+          region: "Bruxelles", // Hardcoded for now
           image: user.image,
         });
-        // console.log("This is the result: ", userData, " Or this is the error: ", userError);
+        // console.log(
+        //   "This is the sent data: ",
+        //   {
+        //     first_name: userFirstName,
+        //     email: email,
+        //     allowed: false,
+        //     role_name: "user",
+        //     region: "Bruxelles", // Hardcoded for now
+        //     image: user.image,
+        //   },
+        //   " Or this is the error: ",
+        //   userError,
+        // );
       } else {
         // console.log("user " + user.email + " already exists in the database so not added");
       }
