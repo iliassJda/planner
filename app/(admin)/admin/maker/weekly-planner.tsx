@@ -65,6 +65,7 @@ import {
 	Download,
 	Printer,
 	Plus,
+	Save,
 } from "lucide-react";
 
 import { Availability, User, Week, DayAvailability, Store } from "@/types";
@@ -118,6 +119,8 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 	const [assignedShifts, setAssignedShifts] = useState<
 		Record<string, Record<string, ShiftAssignment>>
 	>({});
+	const [saveMessage, setSaveMessage] = useState<string>("");
+	const [clearDialog, setClearDialog] = useState(false);
 	// const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
 	// 	startOfWeek(new Date(), { weekStartsOn: 1 }),
 	// );
@@ -249,12 +252,24 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 			return;
 		}
 
+		console.log("These are the shifts for: ", assignedShifts);
+
 		// try {
 		//   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(assignedShifts));
 		//   setSaveMessage(`Saved ${Object.keys(assignedShifts).length} student schedules.`);
 		// } catch {
 		//   setSaveMessage("Could not save shifts in this browser.");
 		// }
+	};
+
+	const handleClear = () => {
+		setClearDialog(true);
+	};
+
+	const handleConfirmClear = () => {
+		setAssignedShifts({});
+		setSaveMessage("");
+		setClearDialog(false);
 	};
 
 	useEffect(() => {
@@ -289,7 +304,27 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 		fetchData();
 	}, [file, user]);
 
+	// useEffect(() => {
+	//   try {
+	//     const savedShifts = localStorage.getItem(SHIFTS_STORAGE_KEY);
+	//     if (savedShifts) {
+	//       setAssignedShifts(
+	//         JSON.parse(savedShifts) as Record<string, Record<string, ShiftAssignment>>,
+	//       );
+	//     }
+	//   } catch {
+	//     setSaveMessage("Could not load previously saved shifts.");
+	//   }
+	// }, []);
+
 	const selectedDayKey = selectedDay ? format(selectedDay, "yyyy-MM-dd") : null;
+	const selectedDayAvailability = selectedDayKey
+		? selectedStudent?.days[selectedDayKey]?.availability
+		: undefined;
+	const dialogDayAvailability: DayAvailability = selectedDayAvailability ?? "not_available";
+	const dialogAvailabilityStyle = AVAILABILITY_STYLES[dialogDayAvailability];
+	const isSelectedDayUnavailable =
+		!selectedDayAvailability || selectedDayAvailability === "not_available";
 	const selectedWeekIdFromDay = selectedDayKey
 		? selectedStudent?.days[selectedDayKey]?.week_id
 		: undefined;
@@ -311,7 +346,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 
 	return (
 		<div>
-			<div className="pb-4">
+			<div className="pb-4 flex flex-wrap justify-between gap-2">
 				{isLoadingWeeks ? (
 					<div className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
 						<RefreshCw className="h-4 w-4 animate-spin" />
@@ -340,6 +375,18 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 				) : (
 					<div>No available weeks</div>
 				)}
+
+				<div className="grid grid-cols-2 gap-3">
+					<Button variant="secondary" onClick={handleClear} disabled={!hasAssignedShifts}>
+						Clear
+					</Button>
+					<Button variant="default" onClick={handleSaveAllShifts} disabled={!hasAssignedShifts}>
+						<Save className="mr-2 h-4 w-4" />
+						Save All Shifts
+					</Button>
+				</div>
+
+				{saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
 			</div>
 			{currentWeek != "null" ? (
 				<Card>
@@ -564,99 +611,126 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 						</div>
 
 						<div className="space-y-2">
-							<h4 className="text-sm font-semibold">Add Shift</h4>
-							<div className="space-y-1">
-								<label htmlFor="shift-store" className="text-xs font-medium text-muted-foreground">
-									Store
-								</label>
-								<Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-									<SelectTrigger id="shift-store" className="w-full">
-										<SelectValue placeholder="Choose store" />
-									</SelectTrigger>
-									<SelectContent>
-										{stores.map((store) => (
-											<SelectItem key={store.id} value={store.id.toString()}>
-												{store.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+							<div className="flex items-center gap-2">
+								<h4 className="text-sm font-semibold">Add Shift</h4>
+								<span
+									className={cn(
+										"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+										dialogDayAvailability === "not_available"
+											? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"
+											: "border-border bg-muted text-muted-foreground",
+									)}
+								>
+									<span className={cn("h-1.5 w-1.5 rounded-full", dialogAvailabilityStyle.dot)} />
+									{dialogAvailabilityStyle.label}
+								</span>
 							</div>
-							{/* <p className="text-sm text-muted-foreground">
-                Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
-              </p> */}
-							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-								<div className="space-y-1">
-									<label className="text-xs font-medium text-muted-foreground">Start hour</label>
-									<Select value={shiftStart} onValueChange={setShiftStart}>
-										<SelectTrigger className="w-full">
-											<SelectValue placeholder="Quick pick" />
-										</SelectTrigger>
-										<SelectContent>
-											{SHIFT_TIME_OPTIONS.map((time) => (
-												<SelectItem key={`start-${time}`} value={time}>
-													{time}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+
+							{isSelectedDayUnavailable ? (
+								<div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+									This user is not available on this day, so no shift can be assigned.
 								</div>
-								<div className="space-y-1">
-									<label className="text-xs font-medium text-muted-foreground">End hour</label>
-									<Select value={shiftEnd} onValueChange={setShiftEnd}>
-										<SelectTrigger className="w-full">
-											<SelectValue placeholder="Quick pick" />
-										</SelectTrigger>
-										<SelectContent>
-											{SHIFT_TIME_OPTIONS.map((time) => (
-												<SelectItem key={`end-${time}`} value={time}>
-													{time}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-							{effectiveIsInvalid ? (
-								<p className="text-xs text-red-600 dark:text-red-400">
-									End hour must be later than start hour.
-								</p>
-							) : null}
-							{customShiftStart && !validateTimeFormat(customShiftStart) ? (
-								<p className="text-xs text-red-600 dark:text-red-400">
-									Start time must be in HH:MM format.
-								</p>
-							) : null}
-							{customShiftEnd && !validateTimeFormat(customShiftEnd) ? (
-								<p className="text-xs text-red-600 dark:text-red-400">
-									End time must be in HH:MM format.
-								</p>
-							) : null}
-							{!selectedStoreId ? (
-								<p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
-							) : null}
-							{/* {selectedStoreName ? (
-                <p className="text-xs text-muted-foreground">Selected store: {selectedStoreName}</p>
-              ) : null} */}
-							{/* <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
-                    {currentWeek != "null" ? currentWeek : "Choose week"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Select Week</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
-                      {weeks.map((week) => (
-                        <DropdownMenuRadioItem key={week.id} value={week.week_label}>
-                          {week.week_label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu> */}
+							) : (
+								<>
+									<div className="space-y-1">
+										<label
+											htmlFor="shift-store"
+											className="text-xs font-medium text-muted-foreground"
+										>
+											Store
+										</label>
+										<Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+											<SelectTrigger id="shift-store" className="w-full">
+												<SelectValue placeholder="Choose store" />
+											</SelectTrigger>
+											<SelectContent>
+												{stores.map((store) => (
+													<SelectItem key={store.id} value={store.id.toString()}>
+														{store.name}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									{/* <p className="text-sm text-muted-foreground">
+                  Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
+                </p> */}
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+										<div className="space-y-1">
+											<label className="text-xs font-medium text-muted-foreground">
+												Start hour
+											</label>
+											<Select value={shiftStart} onValueChange={setShiftStart}>
+												<SelectTrigger className="w-full">
+													<SelectValue placeholder="Quick pick" />
+												</SelectTrigger>
+												<SelectContent>
+													{SHIFT_TIME_OPTIONS.map((time) => (
+														<SelectItem key={`start-${time}`} value={time}>
+															{time}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
+										<div className="space-y-1">
+											<label className="text-xs font-medium text-muted-foreground">End hour</label>
+											<Select value={shiftEnd} onValueChange={setShiftEnd}>
+												<SelectTrigger className="w-full">
+													<SelectValue placeholder="Quick pick" />
+												</SelectTrigger>
+												<SelectContent>
+													{SHIFT_TIME_OPTIONS.map((time) => (
+														<SelectItem key={`end-${time}`} value={time}>
+															{time}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
+									</div>
+									{effectiveIsInvalid ? (
+										<p className="text-xs text-red-600 dark:text-red-400">
+											End hour must be later than start hour.
+										</p>
+									) : null}
+									{customShiftStart && !validateTimeFormat(customShiftStart) ? (
+										<p className="text-xs text-red-600 dark:text-red-400">
+											Start time must be in HH:MM format.
+										</p>
+									) : null}
+									{customShiftEnd && !validateTimeFormat(customShiftEnd) ? (
+										<p className="text-xs text-red-600 dark:text-red-400">
+											End time must be in HH:MM format.
+										</p>
+									) : null}
+									{!selectedStoreId ? (
+										<p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
+									) : null}
+									{/* {selectedStoreName ? (
+                  <p className="text-xs text-muted-foreground">Selected store: {selectedStoreName}</p>
+                ) : null} */}
+									{/* <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                      {currentWeek != "null" ? currentWeek : "Choose week"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Select Week</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
+                        {weeks.map((week) => (
+                          <DropdownMenuRadioItem key={week.id} value={week.week_label}>
+                            {week.week_label}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu> */}
+								</>
+							)}
 						</div>
 					</div>
 
@@ -664,8 +738,30 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 						<Button variant="outline" onClick={() => setDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button onClick={handleSaveShift} disabled={effectiveIsInvalid || !selectedStoreId}>
+						<Button
+							onClick={handleSaveShift}
+							disabled={isSelectedDayUnavailable || effectiveIsInvalid || !selectedStoreId}
+						>
 							Save Shift
+						</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={clearDialog} onOpenChange={setClearDialog}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Clear all shifts?</DialogTitle>
+						<DialogDescription>
+							This will delete all assigned shifts. This action cannot be undone.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="flex gap-2 justify-end">
+						<Button variant="outline" onClick={() => setClearDialog(false)}>
+							Cancel
+						</Button>
+						<Button variant="destructive" onClick={handleConfirmClear}>
+							Clear All
 						</Button>
 					</div>
 				</DialogContent>
