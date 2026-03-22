@@ -1,6 +1,6 @@
 "use server";
 
-import { Availability, RoleName, User, Week, Store } from "@/types";
+import { Availability, RoleName, User, Week, Store, ShiftAssignment } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
 const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
@@ -219,6 +219,34 @@ async function insertAvailability(availability: Availability) {
 
 	// console.log("Inserted availability:", data);
 	return data as Availability[];
+}
+
+async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
+	const result = [];
+
+	for (const [email, dates] of Object.entries(shifts)) {
+		for (const [date, shift] of Object.entries(dates)) {
+			result.push({
+				email: email,
+				shift_date: date,
+				store_id: shift.storeId,
+				start_time: shift.start,
+				end_time: shift.end,
+				hours: shift.hours,
+			});
+		}
+	}
+
+	const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
+
+	if (error) {
+		console.error("Error inserting shifts:", error);
+		return [];
+	}
+
+	console.log("Inserted shifts:", data);
+
+	return data;
 }
 
 async function updateAvailability(availability: Availability) {
@@ -444,4 +472,5 @@ export {
 	activateWeek,
 	getCsvAvailabilities,
 	getAllStoresFromRegion,
+	insertShift,
 };

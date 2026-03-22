@@ -19,6 +19,13 @@ type Week = {
 	// created_at: string;
 };
 
+type ShiftAssignment = {
+	storeId: string;
+	start: string;
+	end: string;
+	hours: number;
+};
+
 type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";
 
 type Availability = {
@@ -48,4 +55,4 @@ type Store = {
 	region: Region;
 };
 
-export type { User, RoleName, Week, Availability, DayAvailability, Store, Region };
+export type { User, RoleName, Week, Availability, DayAvailability, Store, Region, ShiftAssignment };
