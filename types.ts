@@ -20,7 +20,7 @@ type Week = {
 };
 
 type ShiftAssignment = {
-	storeId: string;
+	storeId: number;
 	start: string;
 	end: string;
 	hours: number;

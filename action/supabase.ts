@@ -244,7 +244,20 @@ async function insertShift(shifts: Record<string, Record<string, ShiftAssignment
 		return [];
 	}
 
-	console.log("Inserted shifts:", data);
+	// console.log("Inserted shifts:", data);
+
+	return data;
+}
+
+async function getAllShifts() {
+	const { data, error } = await supabaseAdmin.from("shifts").select("*");
+
+	if (error) {
+		console.error("Error getting all shifts: ", error);
+		return [];
+	}
+
+	console.log("This is all the shifts: ", data);
 
 	return data;
 }
@@ -463,4 +476,5 @@ export {
 	getCsvAvailabilities,
 	getAllStoresFromRegion,
 	insertShift,
+	getAllShifts,
 };
