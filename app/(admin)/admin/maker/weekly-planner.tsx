@@ -37,6 +37,7 @@ import {
 	getAllUsers,
 	getAllStoresFromRegion,
 	insertShift,
+	getAllShifts,
 } from "@/action/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -82,6 +83,36 @@ interface WeeklyPlannerProps {
 	file: File | null;
 }
 
+function fromFlattenedToRecord(
+	data: Array<{
+		email: string;
+		shift_date: string;
+		store_id: number;
+		start_time: string;
+		end_time: string;
+		hours: number;
+	}>,
+) {
+	const result: Record<string, Record<string, ShiftAssignment>> = {};
+
+	data.forEach((shift) => {
+		if (!result[shift.email]) {
+			result[shift.email] = {};
+		}
+		result[shift.email][shift.shift_date] = {
+			// storeId: stores.find((store) => store.id == shift.store_id),
+			storeId: shift.store_id,
+			start: shift.start_time,
+			end: shift.end_time,
+			hours: shift.hours,
+		};
+	});
+
+	console.log("This is the result: ", result);
+
+	return result;
+}
+
 // const SHIFTS_STORAGE_KEY = "weekly-planner-assigned-shifts-v1";
 
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
@@ -105,7 +136,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 		days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
 	} | null>(null);
 	const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-	const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+	const [selectedStoreId, setSelectedStoreId] = useState<number>(0);
 	const [shiftStart, setShiftStart] = useState("09:00");
 	const [shiftEnd, setShiftEnd] = useState("17:00");
 	const [customShiftStart, setCustomShiftStart] = useState("");
@@ -172,7 +203,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 			? assignedShifts[student.user.email]?.[dayKey]
 			: undefined;
 
-		setSelectedStoreId(existingShift?.storeId ?? stores[0]?.id.toString() ?? "");
+		setSelectedStoreId(existingShift?.storeId ?? stores[0]?.id ?? 0);
 		setShiftStart(existingShift?.start ?? "09:00");
 		setShiftEnd(existingShift?.end ?? "17:00");
 		setCustomShiftStart("");
@@ -225,7 +256,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 			[email]: {
 				...(prev[email] ?? {}),
 				[dayKey]: {
-					storeId: selectedStoreId,
+					storeId: selectedStoreId as number,
 					start: effectiveStart,
 					end: effectiveEnd,
 					hours,
@@ -286,6 +317,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 				const availabilities = await getAllAvailability();
 				const stores = await getAllStoresFromRegion(user.region.name);
 				const users = await getAllUsers();
+				const shifts = await getAllShifts();
 				// Sort by year first, then by week_number
 				const sorted = data.sort((a, b) => {
 					if (a.year !== b.year) {
@@ -293,10 +325,11 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 					}
 					return a.week_number - b.week_number;
 				});
+				setAssignedShifts(fromFlattenedToRecord(shifts));
 				setWeeks(sorted);
 				setAvailabilityData(availabilities);
 				setStores(stores);
-				setSelectedStoreId((current) => current || stores[0]?.id.toString() || "");
+				setSelectedStoreId((current) => current || stores[0]?.id || 0);
 				setUsers(users);
 			} finally {
 				setIsLoadingWeeks(false);
@@ -502,8 +535,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 																dayAvailability.availability === "not_available";
 															const savedShift = assignedShifts[entry.user.email]?.[dayKey];
 															const savedStoreName = savedShift
-																? stores.find((store) => store.id.toString() === savedShift.storeId)
-																		?.name
+																? stores.find((store) => store.id === savedShift.storeId)?.name
 																: undefined;
 															return (
 																<td
@@ -641,7 +673,10 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 										>
 											Store
 										</label>
-										<Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+										<Select
+											value={selectedStoreId.toString()}
+											onValueChange={(val) => setSelectedStoreId(Number(val))}
+										>
 											<SelectTrigger id="shift-store" className="w-full">
 												<SelectValue placeholder="Choose store" />
 											</SelectTrigger>
@@ -706,7 +741,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 											End time must be in HH:MM format.
 										</p>
 									) : null}
-									{!selectedStoreId ? (
+									{selectedStoreId === 0 ? (
 										<p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
 									) : null}
 									{/* {selectedStoreName ? (
@@ -742,7 +777,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 						</Button>
 						<Button
 							onClick={handleSaveShift}
-							disabled={isSelectedDayUnavailable || effectiveIsInvalid || !selectedStoreId}
+							disabled={isSelectedDayUnavailable || effectiveIsInvalid || selectedStoreId === 0}
 						>
 							Save Shift
 						</Button>
