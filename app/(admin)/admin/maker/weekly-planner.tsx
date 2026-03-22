@@ -36,6 +36,7 @@ import {
 	getAllAvailability,
 	getAllUsers,
 	getAllStoresFromRegion,
+	insertShift,
 } from "@/action/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -68,7 +69,7 @@ import {
 	Save,
 } from "lucide-react";
 
-import { Availability, User, Week, DayAvailability, Store } from "@/types";
+import { Availability, User, Week, DayAvailability, Store, ShiftAssignment } from "@/types";
 
 import {
 	AVAILABILITY_STYLES,
@@ -81,14 +82,7 @@ interface WeeklyPlannerProps {
 	file: File | null;
 }
 
-type ShiftAssignment = {
-	storeId: string;
-	start: string;
-	end: string;
-	hours: number;
-};
-
-const SHIFTS_STORAGE_KEY = "weekly-planner-assigned-shifts-v1";
+// const SHIFTS_STORAGE_KEY = "weekly-planner-assigned-shifts-v1";
 
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
 	const totalMinutes = 9 * 60 + index * 15;
@@ -247,13 +241,20 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 		(studentShifts) => Object.keys(studentShifts).length > 0,
 	);
 
-	const handleSaveAllShifts = () => {
+	const handleSaveAllShifts = async () => {
 		if (!hasAssignedShifts) {
 			setSaveMessage("No shifts to save yet.");
 			return;
 		}
 
 		console.log("These are the shifts for: ", assignedShifts);
+
+		try {
+			const result = await insertShift(assignedShifts);
+			setSaveMessage(`Saved ${result.length} user shifts`);
+		} catch {
+			setSaveMessage("Could not save shifts... Try again");
+		}
 
 		// try {
 		//   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(assignedShifts));
@@ -354,25 +355,28 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 						Loading weeks...
 					</div>
 				) : weeks.length > 0 ? (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="outline">
-								{currentWeek != "null" ? currentWeek : "Choose week"}
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent>
-							<DropdownMenuGroup>
-								<DropdownMenuLabel>Select Week</DropdownMenuLabel>
-								<DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
-									{weeks.map((week) => (
-										<DropdownMenuRadioItem key={week.id} value={week.week_label}>
-											{week.week_label}
-										</DropdownMenuRadioItem>
-									))}
-								</DropdownMenuRadioGroup>
-							</DropdownMenuGroup>
-						</DropdownMenuContent>
-					</DropdownMenu>
+					<div className="grid grid-cols-2 gap-2 items-center">
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button variant="outline">
+									{currentWeek != "null" ? currentWeek : "Choose week"}
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent>
+								<DropdownMenuGroup>
+									<DropdownMenuLabel>Select Week</DropdownMenuLabel>
+									<DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
+										{weeks.map((week) => (
+											<DropdownMenuRadioItem key={week.id} value={week.week_label}>
+												{week.week_label}
+											</DropdownMenuRadioItem>
+										))}
+									</DropdownMenuRadioGroup>
+								</DropdownMenuGroup>
+							</DropdownMenuContent>
+						</DropdownMenu>
+						{saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
+					</div>
 				) : (
 					<div>No available weeks</div>
 				)}
@@ -386,8 +390,6 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 						Save All Shifts
 					</Button>
 				</div>
-
-				{saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
 			</div>
 			{currentWeek != "null" ? (
 				<Card>
