@@ -19,6 +19,16 @@ type Week = {
 	// created_at: string;
 };
 
+type Shift = {
+	id: number;
+	store_id: number;
+	email: string;
+	shift_date: string;
+	start_time: string;
+	end_time: string;
+	hours: number;
+};
+
 type ShiftAssignment = {
 	storeId: number;
 	start: string;
@@ -55,4 +65,14 @@ type Store = {
 	region: Region;
 };
 
-export type { User, RoleName, Week, Availability, DayAvailability, Store, Region, ShiftAssignment };
+export type {
+	User,
+	RoleName,
+	Week,
+	Availability,
+	DayAvailability,
+	Store,
+	Region,
+	ShiftAssignment,
+	Shift,
+};
