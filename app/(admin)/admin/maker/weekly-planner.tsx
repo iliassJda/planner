@@ -23,7 +23,6 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -38,82 +37,19 @@ import {
 	getAllStoresFromRegion,
 	insertShift,
 	getAllShifts,
+	clearShifts,
 } from "@/action/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-	addMonths,
-	subMonths,
-	startOfMonth,
-	endOfMonth,
-	startOfWeek,
-	endOfWeek,
-	addDays,
-	format,
-	isSameMonth,
-	isToday,
-	getISOWeek,
-	getISOWeekYear,
-} from "date-fns";
-import {
-	ChevronLeft,
-	ChevronRight,
-	Calendar,
-	Users,
-	Sun,
-	Sunset,
-	Clock,
-	X,
-	RefreshCw,
-	Download,
-	Printer,
-	Plus,
-	Save,
-} from "lucide-react";
+import { addDays, format } from "date-fns";
+import { RefreshCw, Save } from "lucide-react";
 
-import { Availability, User, Week, DayAvailability, Store, ShiftAssignment } from "@/types";
+import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift } from "@/types";
 
-import {
-	AVAILABILITY_STYLES,
-	DAY_KEYS,
-	getWeekStartDate,
-	getAvailabilityForDate,
-} from "@/help_functions";
+import { AVAILABILITY_STYLES, getWeekStartDate, getAvailabilityForDate } from "@/help_functions";
 
 interface WeeklyPlannerProps {
 	file: File | null;
 }
-
-function fromFlattenedToRecord(
-	data: Array<{
-		email: string;
-		shift_date: string;
-		store_id: number;
-		start_time: string;
-		end_time: string;
-		hours: number;
-	}>,
-) {
-	const result: Record<string, Record<string, ShiftAssignment>> = {};
-
-	data.forEach((shift) => {
-		if (!result[shift.email]) {
-			result[shift.email] = {};
-		}
-		result[shift.email][shift.shift_date] = {
-			// storeId: stores.find((store) => store.id == shift.store_id),
-			storeId: shift.store_id,
-			start: shift.start_time,
-			end: shift.end_time,
-			hours: shift.hours,
-		};
-	});
-
-	console.log("This is the result: ", result);
-
-	return result;
-}
-
-// const SHIFTS_STORAGE_KEY = "weekly-planner-assigned-shifts-v1";
 
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
 	const totalMinutes = 9 * 60 + index * 15;
@@ -122,7 +58,7 @@ const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
 	return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 });
 
-export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
+export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 	const user = useUser();
 	const [currentWeek, setCurrentWeek] = useState<string>("null");
 	const [weeks, setWeeks] = useState<Week[]>([]);
@@ -142,9 +78,18 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 	const [shiftEnd, setShiftEnd] = useState("17:00");
 	const [customShiftStart, setCustomShiftStart] = useState("");
 	const [customShiftEnd, setCustomShiftEnd] = useState("");
-	const [assignedShifts, setAssignedShifts] = useState<
-		Record<string, Record<string, ShiftAssignment>>
-	>({});
+	const [assignedShifts, setAssignedShifts] = useState<Shift[]>([]);
+	// useState<
+	// 	Array<{
+	// 		id?: string;
+	// 		email: string;
+	// 		shift_date: string;
+	// 		store_id: number;
+	// 		start_time: string;
+	// 		end_time: string;
+	// 		hours: number;
+	// 	}>
+	// >([]);
 	const [saveMessage, setSaveMessage] = useState<string>("");
 	const [clearDialog, setClearDialog] = useState(false);
 	// const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
@@ -200,18 +145,34 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 
 	const handleCellClick = (student: typeof selectedStudent, day: Date) => {
 		const dayKey = format(day, "yyyy-MM-dd");
-		const existingShift = student?.user.email
-			? assignedShifts[student.user.email]?.[dayKey]
-			: undefined;
+		const existingShift = assignedShifts.find(
+			(s) => s.email === student?.user.email && s.shift_date === dayKey,
+		);
 
-		setSelectedStoreId(existingShift?.storeId ?? stores[0]?.id ?? 0);
-		setShiftStart(existingShift?.start ?? "09:00");
-		setShiftEnd(existingShift?.end ?? "17:00");
+		setSelectedStoreId(existingShift?.store_id ?? stores[0]?.id ?? 0);
+		setShiftStart(existingShift?.start_time ?? "09:00");
+		setShiftEnd(existingShift?.end_time ?? "17:00");
 		setCustomShiftStart("");
 		setCustomShiftEnd("");
 		setSelectedStudent(student);
 		setSelectedDay(day);
 		setDialogOpen(true);
+	};
+
+	const getShiftsForCurrentWeek = () => {
+		if (currentWeek === "null") return [];
+
+		const week = weeks.find((w) => w.week_label === currentWeek);
+		if (!week) return [];
+
+		// Get the start and end dates of the week
+		const weekStart = getWeekStartDate(week.week_number, week.year);
+		const weekEnd = addDays(weekStart, 6);
+
+		return assignedShifts.filter((shift) => {
+			const shiftDate = new Date(shift.shift_date);
+			return shiftDate >= weekStart && shiftDate <= weekEnd;
+		});
 	};
 
 	const getShiftDurationHours = (start: string, end: string) => {
@@ -223,13 +184,10 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 	};
 
 	const getAssignedHoursForStudent = (email: string, weekDays: Date[]) => {
-		const studentShifts = assignedShifts[email];
-		if (!studentShifts) return 0;
-
-		return weekDays.reduce((sum, day) => {
-			const dayKey = format(day, "yyyy-MM-dd");
-			return sum + (studentShifts[dayKey]?.hours ?? 0);
-		}, 0);
+		const weekDayStrings = weekDays.map((day) => format(day, "yyyy-MM-dd"));
+		return assignedShifts
+			.filter((s) => s.email === email && weekDayStrings.includes(s.shift_date))
+			.reduce((sum, shift) => sum + shift.hours, 0);
 	};
 
 	const validateTimeFormat = (time: string): boolean => {
@@ -252,25 +210,43 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 		const dayKey = format(selectedDay, "yyyy-MM-dd");
 		const hours = getShiftDurationHours(effectiveStart, effectiveEnd);
 
-		setAssignedShifts((prev) => ({
-			...prev,
-			[email]: {
-				...(prev[email] ?? {}),
-				[dayKey]: {
-					storeId: selectedStoreId as number,
-					start: effectiveStart,
-					end: effectiveEnd,
+		setAssignedShifts((prev) => {
+			// Check if shift already exists for this email and date
+			const existingIndex = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
+
+			if (existingIndex !== -1) {
+				// Update existing shift
+				const updated = [...prev];
+				updated[existingIndex] = {
+					...updated[existingIndex],
+					store_id: selectedStoreId,
+					start_time: effectiveStart,
+					end_time: effectiveEnd,
 					hours,
-				},
-			},
-		}));
+				};
+				return updated;
+			} else {
+				// Add new shift with temporary ID (negative numbers for new unsaved shifts)
+				const tempId = Math.min(...prev.map((s) => s.id || 0), 0) - 1;
+				return [
+					...prev,
+					{
+						id: tempId,
+						email,
+						shift_date: dayKey,
+						store_id: selectedStoreId,
+						start_time: effectiveStart,
+						end_time: effectiveEnd,
+						hours,
+					},
+				];
+			}
+		});
 
 		setDialogOpen(false);
 	};
 
-	const hasAssignedShifts = Object.values(assignedShifts).some(
-		(studentShifts) => Object.keys(studentShifts).length > 0,
-	);
+	const hasAssignedShifts = assignedShifts.length > 0;
 
 	const handleSaveAllShifts = async () => {
 		if (!hasAssignedShifts) {
@@ -278,30 +254,62 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 			return;
 		}
 
-		console.log("These are the shifts for: ", assignedShifts);
+		// console.log("These are the shifts for: ", assignedShifts);
 
 		try {
-			const result = await insertShift(assignedShifts);
+			// Convert flat array to nested format for insertShift
+			const nestedFormat: Record<string, Record<string, ShiftAssignment>> = {};
+			assignedShifts.forEach((shift) => {
+				if (!nestedFormat[shift.email]) {
+					nestedFormat[shift.email] = {};
+				}
+				nestedFormat[shift.email][shift.shift_date] = {
+					storeId: shift.store_id,
+					start: shift.start_time,
+					end: shift.end_time,
+					hours: shift.hours,
+				};
+			});
+			const result = await insertShift(nestedFormat);
 			setSaveMessage(`Saved ${result.length} user shifts`);
 		} catch {
 			setSaveMessage("Could not save shifts... Try again");
 		}
-
-		// try {
-		//   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(assignedShifts));
-		//   setSaveMessage(`Saved ${Object.keys(assignedShifts).length} student schedules.`);
-		// } catch {
-		//   setSaveMessage("Could not save shifts in this browser.");
-		// }
 	};
 
 	const handleClear = () => {
 		setClearDialog(true);
 	};
 
-	const handleConfirmClear = () => {
-		setAssignedShifts({});
-		setSaveMessage("");
+	const handleConfirmClear = async () => {
+		const shiftsToDelete = getShiftsForCurrentWeek();
+
+		if (shiftsToDelete.length === 0) {
+			setSaveMessage("No shifts to clear for this week.");
+			setClearDialog(false);
+			return;
+		}
+
+		try {
+			// Convert flat array to nested format for clearShifts
+			// const nestedFormat: Record<string, Record<string, ShiftAssignment>> = {};
+			// shiftsToDelete.forEach((shift) => {
+			// 	if (!nestedFormat[shift.email]) {
+			// 		nestedFormat[shift.email] = {};
+			// 	}
+			// 	nestedFormat[shift.email][shift.shift_date] = {
+			// 		storeId: shift.store_id,
+			// 		start: shift.start_time,
+			// 		end: shift.end_time,
+			// 		hours: shift.hours,
+			// 	};
+			// });
+			await clearShifts(shiftsToDelete);
+			setSaveMessage(`Cleared shifts for ${currentWeek}`);
+		} catch {
+			setSaveMessage("Could not clear shifts");
+		}
+
 		setClearDialog(false);
 	};
 
@@ -326,7 +334,19 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 					}
 					return a.week_number - b.week_number;
 				});
-				setAssignedShifts(fromFlattenedToRecord(shifts));
+				// setAssignedShifts(fromFlattenedToRecord(shifts));
+				setAssignedShifts(shifts);
+				// setAssignedShifts(
+				// 	shifts.map((shift) => ({
+				// 		id: shift.id.toString(),
+				// 		email: shift.email,
+				// 		shift_date: shift.shift_date,
+				// 		store_id: shift.store_id,
+				// 		start_time: shift.start_time,
+				// 		end_time: shift.end_time,
+				// 		hours: shift.hours,
+				// 	})),
+				// );
 				setWeeks(sorted);
 				setAvailabilityData(availabilities);
 				setStores(stores);
@@ -337,7 +357,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 			}
 		};
 		fetchData();
-	}, [file, user]);
+	}, [user]);
 
 	// useEffect(() => {
 	//   try {
@@ -373,7 +393,6 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 					)
 					?.comment?.trim() || "No comment provided..."
 			: "No comment provided...";
-	const isShiftRangeInvalid = shiftEnd <= shiftStart;
 
 	if (!user) {
 		return <div className="text-sm text-muted-foreground">No user found.</div>;
@@ -464,7 +483,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 												{weekDays.map((day) => (
 													<th
 														key={day.toISOString()}
-														className="border-b border-r bg-muted p-1 sm:p-3 text-center font-medium w-20 sm:w-28 flex-shrink-0"
+														className="border-b border-r bg-muted p-1 sm:p-3 text-center font-medium w-20 sm:w-28 shrink-0"
 													>
 														<div className="font-semibold text-xs sm:text-sm">
 															{format(day, "EEE")}
@@ -482,7 +501,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 													<tr key={entry.user.email} className="hover:bg-muted/50">
 														<td className="sticky left-0 border-b border-r bg-card p-2 sm:p-3 z-10">
 															<div className="flex items-center gap-1.5 sm:gap-2">
-																<Avatar className="h-7 w-7 sm:h-9 sm:w-9 flex-shrink-0">
+																<Avatar className="h-7 w-7 sm:h-9 sm:w-9 shrink-0">
 																	<AvatarImage
 																		src={entry.user.image}
 																		alt={entry.user.first_name}
@@ -534,15 +553,17 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 															const isUnavailableDay =
 																!dayAvailability ||
 																dayAvailability.availability === "not_available";
-															const savedShift = assignedShifts[entry.user.email]?.[dayKey];
+															const savedShift = assignedShifts.find(
+																(s) => s.email === entry.user.email && s.shift_date === dayKey,
+															);
 															const savedStoreName = savedShift
-																? stores.find((store) => store.id === savedShift.storeId)?.name
+																? stores.find((store) => store.id === savedShift.store_id)?.name
 																: undefined;
 															return (
 																<td
 																	key={dayKey}
 																	onClick={() => handleCellClick(entry, day)}
-																	className="relative border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
+																	className="relative border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
 																>
 																	{isUnavailableDay ? (
 																		<div className="pointer-events-none absolute inset-0 bg-slate-300/35 dark:bg-slate-700/45" />
@@ -566,7 +587,7 @@ export default function WeeklyPlanner({ file }: WeeklyPlannerProps) {
 																	{savedShift ? (
 																		<div className="relative z-10 flex h-full flex-col items-center justify-center gap-0.5">
 																			<span className="text-[10px] sm:text-xs font-medium">
-																				{savedShift.start} - {savedShift.end}
+																				{savedShift.start_time} - {savedShift.end_time}
 																			</span>
 																			<span className="text-[9px] sm:text-[11px] text-muted-foreground">
 																				{savedShift.hours}h

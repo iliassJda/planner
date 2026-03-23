@@ -1,6 +1,6 @@
 "use server";
 
-import { Availability, RoleName, User, Week, Store, ShiftAssignment } from "@/types";
+import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
 const ROLE_NAMES: RoleName[] = ["admin", "user"];
@@ -221,7 +221,7 @@ async function insertAvailability(availability: Availability) {
 	return data as Availability[];
 }
 
-async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
+function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignment>>) {
 	const result = [];
 
 	for (const [email, dates] of Object.entries(shifts)) {
@@ -233,10 +233,15 @@ async function insertShift(shifts: Record<string, Record<string, ShiftAssignment
 				start_time: shift.start,
 				end_time: shift.end,
 				hours: shift.hours,
-			});
+			} as Shift);
 		}
 	}
 
+	return result;
+}
+
+async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
+	const result = fromRecordToShifts(shifts);
 	const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
 
 	if (error) {
@@ -258,6 +263,22 @@ async function getAllShifts() {
 	}
 
 	console.log("This is all the shifts: ", data);
+	return data as Shift[];
+}
+
+async function clearShifts(shifts: Shift[]) {
+	// const { data, error } = await supabaseAdmin.from("shifts").delete(shifts);
+	// const shiftsArray = fromRecordToShifts(shifts);
+	const shiftIds = shifts.map((s) => s.id);
+
+	console.log("These are the ID: ", shiftIds, " and there are the shifts: ", shifts);
+
+	const { data, error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
+
+	if (error) {
+		console.error("Error clearing shifts: ", error);
+		return [];
+	}
 
 	return data;
 }
@@ -477,4 +498,5 @@ export {
 	getAllStoresFromRegion,
 	insertShift,
 	getAllShifts,
+	clearShifts,
 };
