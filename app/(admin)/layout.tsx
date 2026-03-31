@@ -34,7 +34,7 @@ export default async function RootLayout({
 		email: session.user.email as string,
 		first_name: session.user.name?.split(" ")[0] as string,
 		image: session.user.image as string,
-		role: "user",
+		role: "student",
 	};
 	// console.log(user);
 	// This gets the data to check whether the user is allowed on the website by checking the
