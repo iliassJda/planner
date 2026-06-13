@@ -29,7 +29,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
 			// If query fails with "No rows" that's okay — means not found
 			if (error && error.code != "PGRST116") {
-				// console.log("Supabase error:", error);
+				console.error("Supabase error:", error);
 				return false;
 			}
 			const userFirstName = user?.name?.split(" ")[0];

@@ -5,6 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+	DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
@@ -36,7 +43,7 @@ export default function AllUsersPage() {
 	const [updatingUser, setUpdatingUser] = useState<string | null>(null);
 	const [confirmAction, setConfirmAction] = useState<{
 		user: User;
-		action: "accept" | "reject" | "makeAdmin" | "removeAdmin";
+		action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
 	} | null>(null);
 
 	const fetchUsers = async () => {
@@ -73,7 +80,7 @@ export default function AllUsersPage() {
 			const result = await updateUserPermissions(email, role);
 			if (result) {
 				toast.success(
-					`User ${role == "admin" ? "promoted to" : "removed from"} admin successfully`,
+					`User ${role != "student" ? "promoted to" : "removed from"} ${role} successfully`,
 				);
 				await fetchUsers();
 			} else {
@@ -97,6 +104,10 @@ export default function AllUsersPage() {
 			case "accept":
 				await handleUpdateUserStatus(user.email, true);
 				break;
+			// case "acceptAsFix":
+			// 	await handleUpdateUserStatus(user.email, true);
+			// 	await handleUpdateUserPermissions(user.email, "fix");
+			// 	break;
 			case "reject":
 				await handleUpdateUserStatus(user.email, false);
 				break;
@@ -104,6 +115,12 @@ export default function AllUsersPage() {
 				await handleUpdateUserPermissions(user.email, "admin");
 				break;
 			case "removeAdmin":
+				await handleUpdateUserPermissions(user.email, "student");
+				break;
+			case "makeFix":
+				await handleUpdateUserPermissions(user.email, "fix");
+				break;
+			case "removeFix":
 				await handleUpdateUserPermissions(user.email, "student");
 				break;
 		}
@@ -119,6 +136,10 @@ export default function AllUsersPage() {
 				return "promote to admin";
 			case "removeAdmin":
 				return "remove admin privileges from";
+			case "makeFix":
+				return "promote to fix";
+			case "removeFix":
+				return "remove fix privileges from";
 			default:
 				return "";
 		}
@@ -126,9 +147,10 @@ export default function AllUsersPage() {
 
 	const pendingUsers = users.filter((user) => !user.allowed);
 	const activeUsers = users.filter((user) => user.allowed);
-	// console.log("All the active users: ", activeUsers);
-	const adminUsers = activeUsers.filter((user) => user.role == "admin");
-	const regularUsers = activeUsers.filter((user) => user.role == "student");
+
+	const adminUsers = activeUsers.filter((user) => user.role === "admin");
+	const fixUsers = activeUsers.filter((user) => user.role === "fix");
+	const regularUsers = activeUsers.filter((user) => user.role === "student");
 
 	// console.log("All users:", users);
 
@@ -147,8 +169,8 @@ export default function AllUsersPage() {
 			</div>
 
 			{/* Stats Cards */}
-			<div className="grid gap-4 sm:grid-cols-4">
-				<Card>
+			<div className="w-full flex gap-4 overflow-x-auto pb-2 items-stretch">
+				<Card className="min-w-[200px] flex-shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3">
 							<Users className="h-6 w-6" />
@@ -159,36 +181,47 @@ export default function AllUsersPage() {
 						</div>
 					</CardContent>
 				</Card>
-				<Card>
+				<Card className="min-w-[200px] flex-shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-green-600 dark:bg-green-950/30 dark:text-green-400">
 							<UserCheck className="h-6 w-6" />
 						</div>
 						<div>
 							<p className="text-2xl font-bold">{regularUsers.length}</p>
-							<p className="text-sm text-muted-foreground">Active users</p>
+							<p className="text-sm text-muted-foreground">Students</p>
 						</div>
 					</CardContent>
 				</Card>
-				<Card>
+				<Card className="min-w-[200px] flex-shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
-						<div className="rounded-lg p-3 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
-							<UserX className="h-6 w-6" />
+						<div className="rounded-lg p-3 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400">
+							<Shield className="h-6 w-6" />
 						</div>
 						<div>
-							<p className="text-2xl font-bold">{pendingUsers.length}</p>
-							<p className="text-sm text-muted-foreground">Pending approval</p>
+							<p className="text-2xl font-bold">{fixUsers.length}</p>
+							<p className="text-sm text-muted-foreground">Employees</p>
 						</div>
 					</CardContent>
 				</Card>
-				<Card>
+				<Card className="min-w-[200px] flex-shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
 							<Crown className="h-6 w-6" />
 						</div>
 						<div>
 							<p className="text-2xl font-bold">{adminUsers.length}</p>
-							<p className="text-sm text-muted-foreground">Administrators</p>
+							<p className="text-sm text-muted-foreground">Admins</p>
+						</div>
+					</CardContent>
+				</Card>
+				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+					<CardContent className="flex items-center gap-4 pt-6">
+						<div className="rounded-lg p-3 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
+							<UserX className="h-6 w-6" />
+						</div>
+						<div>
+							<p className="text-2xl font-bold">{pendingUsers.length}</p>
+							<p className="text-sm text-muted-foreground">Pending</p>
 						</div>
 					</CardContent>
 				</Card>
@@ -232,7 +265,7 @@ export default function AllUsersPage() {
 									<Button
 										variant="outline"
 										size="sm"
-										className="text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 text-xs sm:text-sm px-2 sm:px-3"
+										// className="text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 text-xs sm:text-sm px-2 sm:px-3"
 										onClick={() => setConfirmAction({ user, action: "accept" })}
 										disabled={updatingUser === user.email}
 									>
@@ -249,7 +282,7 @@ export default function AllUsersPage() {
 									<Button
 										variant="outline"
 										size="sm"
-										className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 text-xs sm:text-sm px-2 sm:px-3"
+										// className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 text-xs sm:text-sm px-2 sm:px-3"
 										onClick={() => setConfirmAction({ user, action: "reject" })}
 										disabled={updatingUser === user.email}
 									>
@@ -265,7 +298,7 @@ export default function AllUsersPage() {
 			)}
 
 			{/* Active Users */}
-			<div className="grid gap-6 xl:grid-cols-2">
+			<div className="grid gap-6 xl:grid-cols-3">
 				{/* Administrators */}
 				<Card>
 					<CardHeader>
@@ -300,30 +333,122 @@ export default function AllUsersPage() {
 												<p className="font-medium text-sm sm:text-base truncate">
 													{user.first_name}
 												</p>
-												{/* <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" /> */}
 											</div>
 											<p className="text-xs sm:text-sm text-muted-foreground truncate">
 												{user.email}
 											</p>
 										</div>
 									</div>
-									<Button
-										variant="outline"
-										size="sm"
-										className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 text-xs sm:text-sm px-2 sm:px-3 flex-shrink-0"
-										onClick={() => setConfirmAction({ user, action: "removeAdmin" })}
-										disabled={updatingUser === user.email}
-									>
-										{updatingUser === user.email ? (
-											"Processing..."
-										) : (
-											<>
-												<UserX className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-												<span className="hidden sm:inline">Remove Admin</span>
-												<span className="sm:hidden">Remove</span>
-											</>
-										)}
-									</Button>
+									<div className="flex items-center gap-2 flex-shrink-0">
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-8 w-8 p-0"
+													disabled={updatingUser === user.email}
+												>
+													<span className="sr-only">Open menu</span>
+													<MoreHorizontal className="h-4 w-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end" className="w-[160px]">
+												<DropdownMenuItem
+													onClick={() => setConfirmAction({ user, action: "removeAdmin" })}
+												>
+													<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+													<span>Remove Admin</span>
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
+									</div>
+								</div>
+							))
+						)}
+					</CardContent>
+				</Card>
+
+				{/* Fix Users */}
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+							Employees ({fixUsers.length})
+						</CardTitle>
+						<CardDescription>Employees with schedule fix privileges</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						{fixUsers.length === 0 ? (
+							<p className="text-sm text-muted-foreground">No fixers found</p>
+						) : (
+							fixUsers.map((user) => (
+								<div
+									key={user.email}
+									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
+								>
+									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+											<AvatarImage
+												src={user.image}
+												alt={user.first_name}
+												referrerPolicy="no-referrer"
+											/>
+											<AvatarFallback className="text-xs sm:text-sm">
+												{getInitials(user.first_name)}
+											</AvatarFallback>
+										</Avatar>
+										<div className="min-w-0 flex-1">
+											<p className="font-medium text-sm sm:text-base truncate">{user.first_name}</p>
+											<p className="text-xs sm:text-sm text-muted-foreground truncate">
+												{user.email}
+											</p>
+										</div>
+									</div>
+									<div className="flex items-center gap-2 flex-shrink-0">
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-8 w-8 p-0"
+													disabled={updatingUser === user.email}
+												>
+													<span className="sr-only">Open menu</span>
+													<MoreHorizontal className="h-4 w-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end" className="w-[160px]">
+												<DropdownMenuItem
+													onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
+												>
+													<Crown className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
+													<span>Make Admin</span>
+												</DropdownMenuItem>
+												{/* <DropdownMenuItem
+													onClick={() => setConfirmAction({ user, action: "makeFix" })}
+												>
+													<Shield className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
+													<span>Make Fixer</span>
+												</DropdownMenuItem> */}
+												{/* <DropdownMenuSeparator /> */}
+												<DropdownMenuItem
+													// className="text-orange-600 focus:bg-orange-50 focus:text-orange-700 dark:text-orange-400 dark:focus:bg-orange-900/20 dark:focus:text-orange-300"
+													onClick={() => setConfirmAction({ user, action: "removeFix" })}
+												>
+													<UserX className="mr-2 h-4 w-4 text-orange-600 dark:text-orange-400" />
+													<span>Remove Employee Role</span>
+												</DropdownMenuItem>
+												<DropdownMenuSeparator />
+												<DropdownMenuItem
+													// className="text-red-600 focus:bg-red-50 focus:text-red-700 dark:text-red-400 dark:focus:bg-red-900/20 dark:focus:text-red-300"
+													onClick={() => setConfirmAction({ user, action: "reject" })}
+												>
+													<XCircle className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+													<span>Revoke Access</span>
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
+									</div>
 								</div>
 							))
 						)}
@@ -335,9 +460,9 @@ export default function AllUsersPage() {
 					<CardHeader>
 						<CardTitle className="flex items-center gap-2">
 							<UserCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
-							Regular Users ({regularUsers.length})
+							Students ({regularUsers.length})
 						</CardTitle>
-						<CardDescription>Active users with standard permissions</CardDescription>
+						<CardDescription>Students with standard permissions</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{regularUsers.length === 0 ? (
@@ -367,34 +492,41 @@ export default function AllUsersPage() {
 										</div>
 									</div>
 									<div className="flex items-center gap-2 flex-shrink-0">
-										<Button
-											variant="outline"
-											size="sm"
-											className="text-blue-600 hover:text-blue-700 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 text-xs sm:text-sm px-2 sm:px-3"
-											onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
-											disabled={updatingUser === user.email}
-										>
-											{updatingUser === user.email ? (
-												"Processing..."
-											) : (
-												<>
-													<ShieldCheck className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-													<span className="hidden sm:inline">Make Admin</span>
-													<span className="sm:hidden">Admin</span>
-												</>
-											)}
-										</Button>
-										<Button
-											variant="outline"
-											size="sm"
-											className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 text-xs sm:text-sm px-2 sm:px-3"
-											onClick={() => setConfirmAction({ user, action: "reject" })}
-											disabled={updatingUser === user.email}
-										>
-											<UserX className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-											<span className="hidden sm:inline">Revoke Access</span>
-											<span className="sm:hidden">Revoke</span>
-										</Button>
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-8 w-8 p-0"
+													disabled={updatingUser === user.email}
+												>
+													<span className="sr-only">Open menu</span>
+													<MoreHorizontal className="h-4 w-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end" className="w-[160px]">
+												<DropdownMenuItem
+													onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
+												>
+													<ShieldCheck className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
+													<span>Make Admin</span>
+												</DropdownMenuItem>
+												<DropdownMenuItem
+													onClick={() => setConfirmAction({ user, action: "makeFix" })}
+												>
+													<ShieldCheck className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
+													<span>Make Fix</span>
+												</DropdownMenuItem>
+												<DropdownMenuSeparator />
+												<DropdownMenuItem
+													// className="text-red-600 focus:bg-red-50 focus:text-red-700 dark:text-red-400 dark:focus:bg-red-900/20 dark:focus:text-red-300"
+													onClick={() => setConfirmAction({ user, action: "reject" })}
+												>
+													<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+													<span>Revoke Access</span>
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
 									</div>
 								</div>
 							))
@@ -431,6 +563,13 @@ export default function AllUsersPage() {
 						>
 							{updatingUser ? "Processing..." : "Confirm"}
 						</Button>
+						{/* <Button
+							variant="secondary"
+							onClick={handleConfirmAction}
+							disabled={!!updatingUser}
+						>
+							{updatingUser ? "Processing..." : "Confirm as Employee"}
+						</Button> */}
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

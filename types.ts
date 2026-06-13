@@ -4,6 +4,7 @@ type User = {
 	image: string;
 	// admin: boolean;
 	role: RoleName;
+	region: Region;
 	allowed?: boolean;
 };
 
@@ -16,6 +17,23 @@ type Week = {
 	week_label: string;
 	is_active: boolean;
 	// created_at: string;
+};
+
+type Shift = {
+	id: number;
+	store_id: number;
+	email: string;
+	shift_date: string;
+	start_time: string;
+	end_time: string;
+	hours: number;
+};
+
+type ShiftAssignment = {
+	storeId: number;
+	start: string;
+	end: string;
+	hours: number;
 };
 
 type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";
@@ -36,4 +54,25 @@ type Availability = {
 	comment: string;
 };
 
-export type { User, RoleName, Week, Availability, DayAvailability };
+type Region = {
+	id: number;
+	name: string;
+};
+
+type Store = {
+	id: number;
+	name: string;
+	region: Region;
+};
+
+export type {
+	User,
+	RoleName,
+	Week,
+	Availability,
+	DayAvailability,
+	Store,
+	Region,
+	ShiftAssignment,
+	Shift,
+};

@@ -1,6 +1,6 @@
 "use server";
 
-import { Availability, RoleName, User, Week } from "@/types";
+import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
 const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
@@ -221,6 +221,68 @@ async function insertAvailability(availability: Availability) {
 	return data as Availability[];
 }
 
+function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignment>>) {
+	const result = [];
+
+	for (const [email, dates] of Object.entries(shifts)) {
+		for (const [date, shift] of Object.entries(dates)) {
+			result.push({
+				email: email,
+				shift_date: date,
+				store_id: shift.storeId,
+				start_time: shift.start,
+				end_time: shift.end,
+				hours: shift.hours,
+			} as Shift);
+		}
+	}
+
+	return result;
+}
+
+async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
+	const result = fromRecordToShifts(shifts);
+	const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
+
+	if (error) {
+		console.error("Error inserting shifts:", error);
+		return [];
+	}
+
+	// console.log("Inserted shifts:", data);
+
+	return data;
+}
+
+async function getAllShifts() {
+	const { data, error } = await supabaseAdmin.from("shifts").select("*");
+
+	if (error) {
+		console.error("Error getting all shifts: ", error);
+		return [];
+	}
+
+	console.log("This is all the shifts: ", data);
+	return data as Shift[];
+}
+
+async function clearShifts(shifts: Shift[]) {
+	// const { data, error } = await supabaseAdmin.from("shifts").delete(shifts);
+	// const shiftsArray = fromRecordToShifts(shifts);
+	const shiftIds = shifts.map((s) => s.id);
+
+	console.log("These are the ID: ", shiftIds, " and there are the shifts: ", shifts);
+
+	const { data, error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
+
+	if (error) {
+		console.error("Error clearing shifts: ", error);
+		return [];
+	}
+
+	return data;
+}
+
 async function updateAvailability(availability: Availability) {
 	const { data, error } = await supabaseAdmin
 		.from("Availability")
@@ -339,6 +401,16 @@ async function updateUserStatus(email: string, allowed: boolean) {
 	// }
 }
 
+async function getAllStoresFromRegion(region: string) {
+	const { data, error } = await supabaseAdmin.from("store").select("*").eq("region", region);
+
+	if (error) {
+		console.error("Error fetching stores from ", region, " :", error);
+	}
+
+	return data as Store[];
+}
+
 async function getAllAvailability() {
 	const { data, error } = await supabaseAdmin
 		.from("Availability")
@@ -423,4 +495,8 @@ export {
 	deactivateWeek,
 	activateWeek,
 	getCsvAvailabilities,
+	getAllStoresFromRegion,
+	insertShift,
+	getAllShifts,
+	clearShifts,
 };
