@@ -41,7 +41,7 @@ import {
 } from "@/action/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, format } from "date-fns";
-import { RefreshCw, Save } from "lucide-react";
+import { RefreshCw, Save, CalendarPlus } from "lucide-react";
 
 import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift } from "@/types";
 
@@ -394,28 +394,37 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 			: "No comment provided...";
 
 	if (!user) {
-		return <div className="text-sm text-muted-foreground">No user found.</div>;
+		return <div className="text-sm text-muted-foreground p-4">No user found.</div>;
 	}
 
 	return (
-		<div>
-			<div className="pb-4 flex flex-wrap justify-between gap-2">
+		<div className="flex flex-col space-y-4 w-full max-w-7xl mx-auto pb-10">
+			<div className="space-y-1 mb-2">
+				<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Planner Maker</h1>
+				<p className="text-muted-foreground text-sm">
+					Create, edit, and manage your weekly schedules
+				</p>
+			</div>
+
+			{/* Toolbar */}
+			<div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm">
 				{isLoadingWeeks ? (
-					<div className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
+					<div className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
 						<RefreshCw className="h-4 w-4 animate-spin" />
-						Loading weeks...
+						Loading context...
 					</div>
 				) : weeks.length > 0 ? (
-					<div className="grid grid-cols-2 gap-2 items-center">
+					<div className="flex flex-wrap items-center gap-3">
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
-								<Button variant="outline">
-									{currentWeek != "null" ? currentWeek : "Choose week"}
+								<Button variant="outline" className="min-w-[140px] justify-between">
+									{currentWeek !== "null" ? currentWeek : "Select a week..."}
+									<span className="opacity-50 text-xs">▼</span>
 								</Button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent>
+							<DropdownMenuContent className="w-56" align="start">
 								<DropdownMenuGroup>
-									<DropdownMenuLabel>Select Week</DropdownMenuLabel>
+									<DropdownMenuLabel>Available Weeks</DropdownMenuLabel>
 									<DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
 										{weeks.map((week) => (
 											<DropdownMenuRadioItem key={week.id} value={week.week_label}>
@@ -426,45 +435,48 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 								</DropdownMenuGroup>
 							</DropdownMenuContent>
 						</DropdownMenu>
-						{saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
+
+						{saveMessage && (
+							<span className="text-sm font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400 px-3 py-1 rounded-full animate-in fade-in">
+								{saveMessage}
+							</span>
+						)}
 					</div>
 				) : (
-					<div>No available weeks</div>
+					<div className="text-sm text-muted-foreground">No available weeks configured</div>
 				)}
 
-				<div className="grid grid-cols-2 gap-3">
-					<Button variant="secondary" onClick={handleClear} disabled={!hasAssignedShifts}>
-						Clear
+				<div className="flex items-center gap-2 w-full sm:w-auto">
+					<Button
+						variant="secondary"
+						onClick={handleClear}
+						disabled={!hasAssignedShifts || currentWeek === "null"}
+						className="flex-1 sm:flex-none"
+					>
+						Clear Data
 					</Button>
-					<Button variant="default" onClick={handleSaveAllShifts} disabled={!hasAssignedShifts}>
+					<Button
+						variant="default"
+						onClick={handleSaveAllShifts}
+						disabled={!hasAssignedShifts || currentWeek === "null"}
+						className="flex-1 sm:flex-none shadow-sm"
+					>
 						<Save className="mr-2 h-4 w-4" />
-						Save All Shifts
+						Save Schedule
 					</Button>
 				</div>
 			</div>
-			{currentWeek != "null" ? (
-				<Card>
+
+			{currentWeek !== "null" ? (
+				<Card className="border shadow-sm overflow-hidden flex flex-col">
 					{/* Week Navigation */}
-					<CardHeader className="flex flex-row items-center justify-center space-y-0 pb-4">
-						{/* <Button
-						variant="outline"
-						size="icon"
-						onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))}
-					>
-						<ChevronLeft className="h-4 w-4" />
-					</Button> */}
-						<CardTitle className="text-lg">
-							{currentWeek}
-							{/* ({format(currentWeekStart, "MMM d")} –{" "}
-              {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}) */}
+					<CardHeader className="bg-muted/30 border-b py-3 px-4">
+						<CardTitle className="text-lg font-semibold text-center flex items-center justify-center gap-2">
+							{/* <span className="bg-primary/10 text-primary p-1.5 rounded-md">
+								<CalendarPlus className="h-4 w-4" />
+							</span> */}
+							{currentWeek} Schedule
 						</CardTitle>
-						{/* <Button
-						variant="outline"
-						size="icon"
-						onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))}
-					>
-						<ChevronRight className="h-4 w-4" />
-					</Button> */}
 					</CardHeader>
 
 					<CardContent className="p-0 overflow-hidden">
@@ -472,23 +484,25 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 							const { weekDays, weekStudents } = getWeeklyAvailability(currentWeek);
 
 							return (
-								<div className="w-full overflow-x-auto">
+								<div className="w-full overflow-x-auto bg-card rounded-b-xl">
 									<table className="w-full border-collapse text-xs sm:text-sm">
 										<thead>
 											<tr>
-												<th className="sticky left-0 border-b border-r bg-muted p-2 sm:p-3 text-left font-medium w-32 sm:w-40 z-10">
-													<div className="text-xs sm:text-sm">Student</div>
+												<th className="sticky left-0 border-b border-border/60 bg-muted/20 p-3 sm:p-4 text-left font-medium w-36 sm:w-48 z-20 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">
+													<div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+														Employee
+													</div>
 												</th>
 												{weekDays.map((day) => (
 													<th
 														key={day.toISOString()}
-														className="border-b border-r bg-muted p-1 sm:p-3 text-center font-medium w-20 sm:w-28 shrink-0"
+														className="border-b border-l border-border/60 bg-muted/20 p-2 sm:p-3 text-center w-24 sm:w-32 shrink-0"
 													>
-														<div className="font-semibold text-xs sm:text-sm">
+														<div className="font-semibold text-sm sm:text-base text-foreground">
 															{format(day, "EEE")}
 														</div>
-														<div className="text-[10px] sm:text-xs text-muted-foreground">
-															{format(day, "d MMM")}
+														<div className="text-[11px] sm:text-xs text-muted-foreground font-medium mt-0.5">
+															{format(day, "MMM d")}
 														</div>
 													</th>
 												))}
@@ -497,24 +511,26 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 										<tbody>
 											{weekStudents.length > 0 ? (
 												weekStudents.map((entry) => (
-													<tr key={entry.user.email} className="hover:bg-muted/50">
-														<td className="sticky left-0 border-b border-r bg-card p-2 sm:p-3 z-10">
-															<div className="flex items-center gap-1.5 sm:gap-2">
-																<Avatar className="h-7 w-7 sm:h-9 sm:w-9 shrink-0">
+													<tr
+														key={entry.user.email}
+														className="group hover:bg-muted/30 transition-colors"
+													>
+														<td className="sticky left-0 border-b border-border/60 bg-card group-hover:bg-muted/30 p-2 sm:p-3 z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)] transition-colors">
+															<div className="flex items-center gap-2 sm:gap-3">
+																<Avatar className="h-8 w-8 sm:h-10 sm:w-10 border shadow-sm shrink-0">
 																	<AvatarImage
 																		src={entry.user.image}
 																		alt={entry.user.first_name}
 																		referrerPolicy="no-referrer"
 																	/>
-																	<AvatarFallback className="text-[10px] sm:text-sm">
+																	<AvatarFallback className="text-[10px] sm:text-xs font-medium bg-primary/5 text-primary">
 																		{getInitials(entry.user.first_name)}
 																	</AvatarFallback>
 																</Avatar>
-																<div className="min-w-0 flex-1">
-																	<p className="text-xs sm:text-sm font-medium truncate">
+																<div className="min-w-0 flex-1 flex flex-col justify-center">
+																	<p className="text-sm font-semibold truncate text-foreground leading-tight">
 																		{entry.user.first_name}
 																	</p>
-																	{/* <p className=""></p> */}
 																	{(() => {
 																		const firstDay = weekDays.find(
 																			(d) => entry.days[format(d, "yyyy-MM-dd")],
@@ -527,16 +543,30 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 																			entry.user.email,
 																			weekDays,
 																		);
-																		// const partOfDay = firstDayData?.availability;
+
+																		// Status colors based on assignment vs target
+																		let hoursColorClass = "text-muted-foreground";
+																		if (targetHours && targetHours > 0) {
+																			if (assignedHours === targetHours)
+																				hoursColorClass = "text-emerald-600 dark:text-emerald-400";
+																			else if (assignedHours > targetHours)
+																				hoursColorClass = "text-amber-600 dark:text-amber-400";
+																		}
+
 																		return (
-																			<div>
-																				{/* <p>{partOfDay}</p> */}
-																				<p className="text-[9px] sm:text-xs text-muted-foreground truncate line-clamp-1">
-																					assigned {assignedHours}h
+																			<div className="mt-0.5 flex items-center gap-1.5">
+																				<span
+																					className={cn(
+																						"text-[10px] sm:text-xs font-medium truncate",
+																						hoursColorClass,
+																					)}
+																				>
+																					{assignedHours}h{" "}
+																					<span className="opacity-70 font-normal">assigned</span>
 																					{targetHours != null && targetHours > 0
-																						? ` / ${targetHours}h target`
+																						? ` / ${targetHours}h`
 																						: ""}
-																				</p>
+																				</span>
 																			</div>
 																		);
 																	})()}
@@ -562,45 +592,48 @@ export default function WeeklyPlanner({}: WeeklyPlannerProps) {
 																<td
 																	key={dayKey}
 																	onClick={() => handleCellClick(entry, day)}
-																	className="relative border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
+																	className="relative border-b border-l border-border/60 p-1.5 sm:p-2 text-center h-20 sm:h-24 w-24 sm:w-32 shrink-0 cursor-pointer hover:bg-primary/5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-20"
 																>
 																	{isUnavailableDay ? (
-																		<div className="pointer-events-none absolute inset-0 bg-slate-300/35 dark:bg-slate-700/45" />
+																		<div className="pointer-events-none absolute inset-0 bg-repeating-linear-gradient-45 from-transparent to-transparent bg-[length:10px_10px] opacity-10 bg-slate-400 dark:bg-slate-600" />
 																	) : null}
+
 																	{availabilityStyle ? (
 																		<div
-																			className="absolute left-1 top-1 z-10 inline-flex items-center gap-1 rounded-full bg-background/70 px-1.5 py-0.5"
+																			className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-sm bg-background/80 backdrop-blur-sm px-1.5 py-0.5 shadow-sm border border-border/50"
 																			title={availabilityStyle.label}
 																		>
 																			<span
 																				className={cn(
-																					"h-1.5 w-1.5 rounded-full opacity-80",
+																					"h-1.5 w-1.5 rounded-full opacity-100",
 																					availabilityStyle.dot,
 																				)}
 																			/>
-																			<span className="text-[9px] leading-none text-muted-foreground">
+																			<span className="text-[9px] font-medium leading-none text-foreground/80">
 																				{availabilityStyle.short}
 																			</span>
 																		</div>
 																	) : null}
+
 																	{savedShift ? (
-																		<div className="relative z-10 flex h-full flex-col items-center justify-center gap-0.5">
-																			<span className="text-[10px] sm:text-xs font-medium">
-																				{savedShift.start_time} - {savedShift.end_time}
-																			</span>
-																			<span className="text-[9px] sm:text-[11px] text-muted-foreground">
-																				{savedShift.hours}h
-																			</span>
-																			{savedStoreName ? (
-																				<span className="text-[9px] sm:text-[10px] text-muted-foreground line-clamp-1">
-																					{savedStoreName}
+																		<div className="relative z-10 flex h-full flex-col items-center justify-center pt-3">
+																			<div className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 w-full max-w-[90%] shadow-sm flex flex-col gap-0.5">
+																				<span className="text-[11px] sm:text-xs font-bold font-mono tracking-tight leading-none">
+																					{savedShift.start_time} - {savedShift.end_time}
 																				</span>
-																			) : null}
+																				{savedStoreName && (
+																					<span className="text-[9px] sm:text-[10px] font-medium opacity-80 leading-none truncate w-full">
+																						{savedStoreName}
+																					</span>
+																				)}
+																			</div>
 																		</div>
 																	) : (
-																		<span className="relative z-10 text-[9px] sm:text-xs text-muted-foreground">
-																			+
-																		</span>
+																		<div className="relative z-10 h-full w-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+																			<div className="bg-muted rounded-md p-1.5 text-muted-foreground">
+																				<CalendarPlus className="h-4 w-4" />
+																			</div>
+																		</div>
 																	)}
 																</td>
 															);
