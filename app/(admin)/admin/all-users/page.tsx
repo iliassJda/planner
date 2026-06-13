@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,6 +36,76 @@ import { getAllUsers, updateUserPermissions, updateUserStatus } from "@/action/s
 import UserSkeleton from "@/components/user-skeleton";
 
 import { getInitials } from "@/help_functions";
+
+type MenuAction = "admin" | "fix" | "student";
+
+function getOptions(
+	user: User,
+	updatingUser: string | null,
+	setConfirmAction: Dispatch<
+		SetStateAction<{
+			user: User;
+			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+		} | null>
+	>,
+	menuType: MenuAction,
+) {
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="h-8 w-8 p-0"
+					disabled={updatingUser === user.email}
+				>
+					<span className="sr-only">Open menu</span>
+					<MoreHorizontal className="h-4 w-4" />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-[180px]">
+				{menuType === "admin" ? (
+					<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "removeAdmin" })}>
+						<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+						<span>Remove Admin</span>
+					</DropdownMenuItem>
+				) : menuType === "fix" ? (
+					<>
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
+							<Crown className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
+							<span>Make Admin</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "removeFix" })}>
+							<UserX className="mr-2 h-4 w-4 text-orange-600 dark:text-orange-400" />
+							<span>Remove Employee Role</span>
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "reject" })}>
+							<XCircle className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+							<span>Revoke Access</span>
+						</DropdownMenuItem>
+					</>
+				) : (
+					<>
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
+							<ShieldCheck className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
+							<span>Make Admin</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeFix" })}>
+							<Shield className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
+							<span>Make Fix</span>
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "reject" })}>
+							<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+							<span>Revoke Access</span>
+						</DropdownMenuItem>
+					</>
+				)}
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
 
 export default function AllUsersPage() {
 	const [users, setUsers] = useState<User[]>([]);
@@ -170,7 +240,7 @@ export default function AllUsersPage() {
 
 			{/* Stats Cards */}
 			<div className="w-full flex gap-4 overflow-x-auto pb-2 items-stretch">
-				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+				<Card className="min-w-[200px] shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3">
 							<Users className="h-6 w-6" />
@@ -181,7 +251,7 @@ export default function AllUsersPage() {
 						</div>
 					</CardContent>
 				</Card>
-				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+				<Card className="min-w-[200px] shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-green-600 dark:bg-green-950/30 dark:text-green-400">
 							<UserCheck className="h-6 w-6" />
@@ -192,7 +262,7 @@ export default function AllUsersPage() {
 						</div>
 					</CardContent>
 				</Card>
-				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+				<Card className="min-w-[200px] shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400">
 							<Shield className="h-6 w-6" />
@@ -203,7 +273,7 @@ export default function AllUsersPage() {
 						</div>
 					</CardContent>
 				</Card>
-				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+				<Card className="min-w-[200px] shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
 							<Crown className="h-6 w-6" />
@@ -214,7 +284,7 @@ export default function AllUsersPage() {
 						</div>
 					</CardContent>
 				</Card>
-				<Card className="min-w-[200px] flex-shrink-0 flex-1">
+				<Card className="min-w-[200px] shrink-0 flex-1">
 					<CardContent className="flex items-center gap-4 pt-6">
 						<div className="rounded-lg p-3 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
 							<UserX className="h-6 w-6" />
@@ -244,7 +314,7 @@ export default function AllUsersPage() {
 								className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
 							>
 								<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-									<Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+									<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
 										<AvatarImage
 											src={user.image}
 											alt={user.first_name}
@@ -261,7 +331,7 @@ export default function AllUsersPage() {
 										</p>
 									</div>
 								</div>
-								<div className="flex items-center gap-2 flex-shrink-0">
+								<div className="flex items-center gap-2 shrink-0">
 									<Button
 										variant="outline"
 										size="sm"
@@ -318,7 +388,7 @@ export default function AllUsersPage() {
 									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
 								>
 									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
 											<AvatarImage
 												src={user.image}
 												alt={user.first_name}
@@ -339,28 +409,8 @@ export default function AllUsersPage() {
 											</p>
 										</div>
 									</div>
-									<div className="flex items-center gap-2 flex-shrink-0">
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button
-													variant="ghost"
-													size="sm"
-													className="h-8 w-8 p-0"
-													disabled={updatingUser === user.email}
-												>
-													<span className="sr-only">Open menu</span>
-													<MoreHorizontal className="h-4 w-4" />
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end" className="w-[160px]">
-												<DropdownMenuItem
-													onClick={() => setConfirmAction({ user, action: "removeAdmin" })}
-												>
-													<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
-													<span>Remove Admin</span>
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
+									<div className="flex items-center gap-2 shrink-0">
+										{getOptions(user, updatingUser, setConfirmAction, "admin")}
 									</div>
 								</div>
 							))
@@ -387,7 +437,7 @@ export default function AllUsersPage() {
 									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
 								>
 									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
 											<AvatarImage
 												src={user.image}
 												alt={user.first_name}
@@ -404,50 +454,8 @@ export default function AllUsersPage() {
 											</p>
 										</div>
 									</div>
-									<div className="flex items-center gap-2 flex-shrink-0">
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button
-													variant="ghost"
-													size="sm"
-													className="h-8 w-8 p-0"
-													disabled={updatingUser === user.email}
-												>
-													<span className="sr-only">Open menu</span>
-													<MoreHorizontal className="h-4 w-4" />
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end" className="w-[160px]">
-												<DropdownMenuItem
-													onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
-												>
-													<Crown className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
-													<span>Make Admin</span>
-												</DropdownMenuItem>
-												{/* <DropdownMenuItem
-													onClick={() => setConfirmAction({ user, action: "makeFix" })}
-												>
-													<Shield className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
-													<span>Make Fixer</span>
-												</DropdownMenuItem> */}
-												{/* <DropdownMenuSeparator /> */}
-												<DropdownMenuItem
-													// className="text-orange-600 focus:bg-orange-50 focus:text-orange-700 dark:text-orange-400 dark:focus:bg-orange-900/20 dark:focus:text-orange-300"
-													onClick={() => setConfirmAction({ user, action: "removeFix" })}
-												>
-													<UserX className="mr-2 h-4 w-4 text-orange-600 dark:text-orange-400" />
-													<span>Remove Employee Role</span>
-												</DropdownMenuItem>
-												<DropdownMenuSeparator />
-												<DropdownMenuItem
-													// className="text-red-600 focus:bg-red-50 focus:text-red-700 dark:text-red-400 dark:focus:bg-red-900/20 dark:focus:text-red-300"
-													onClick={() => setConfirmAction({ user, action: "reject" })}
-												>
-													<XCircle className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
-													<span>Revoke Access</span>
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
+									<div className="flex items-center gap-2 shrink-0">
+										{getOptions(user, updatingUser, setConfirmAction, "fix")}
 									</div>
 								</div>
 							))
@@ -474,7 +482,7 @@ export default function AllUsersPage() {
 									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
 								>
 									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
 											<AvatarImage
 												src={user.image}
 												alt={user.first_name}
@@ -491,42 +499,8 @@ export default function AllUsersPage() {
 											</p>
 										</div>
 									</div>
-									<div className="flex items-center gap-2 flex-shrink-0">
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button
-													variant="ghost"
-													size="sm"
-													className="h-8 w-8 p-0"
-													disabled={updatingUser === user.email}
-												>
-													<span className="sr-only">Open menu</span>
-													<MoreHorizontal className="h-4 w-4" />
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end" className="w-[160px]">
-												<DropdownMenuItem
-													onClick={() => setConfirmAction({ user, action: "makeAdmin" })}
-												>
-													<ShieldCheck className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
-													<span>Make Admin</span>
-												</DropdownMenuItem>
-												<DropdownMenuItem
-													onClick={() => setConfirmAction({ user, action: "makeFix" })}
-												>
-													<ShieldCheck className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
-													<span>Make Fix</span>
-												</DropdownMenuItem>
-												<DropdownMenuSeparator />
-												<DropdownMenuItem
-													// className="text-red-600 focus:bg-red-50 focus:text-red-700 dark:text-red-400 dark:focus:bg-red-900/20 dark:focus:text-red-300"
-													onClick={() => setConfirmAction({ user, action: "reject" })}
-												>
-													<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
-													<span>Revoke Access</span>
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
+									<div className="flex items-center gap-2 shrink-0">
+										{getOptions(user, updatingUser, setConfirmAction, "student")}
 									</div>
 								</div>
 							))
