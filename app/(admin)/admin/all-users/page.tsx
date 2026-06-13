@@ -170,6 +170,7 @@ export default function AllUsersPage() {
 	const [users, setUsers] = useState<User[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+
 	const [confirmAction, setConfirmAction] = useState<{
 		user: User;
 		action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
