@@ -1,5 +1,6 @@
 type User = {
 	first_name: string;
+	nickname: string;
 	email: string;
 	image: string;
 	// admin: boolean;

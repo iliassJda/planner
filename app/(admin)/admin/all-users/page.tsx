@@ -29,10 +29,16 @@ import {
 	CheckCircle,
 	XCircle,
 	MoreHorizontal,
+	Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RoleName, User } from "@/types";
-import { getAllUsers, updateUserPermissions, updateUserStatus } from "@/action/supabase";
+import {
+	getAllUsers,
+	updateUserPermissions,
+	updateUserStatus,
+	changeNickname,
+} from "@/action/supabase";
 import UserSkeleton from "@/components/user-skeleton";
 
 import { getInitials } from "@/help_functions";
@@ -46,6 +52,7 @@ function getOptions(
 		SetStateAction<{
 			user: User;
 			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+			// | "changeNickname";
 		} | null>
 	>,
 	menuType: MenuAction,
@@ -64,6 +71,10 @@ function getOptions(
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-[180px]">
+				{/* <DropdownMenuItem onClick={() => setConfirmAction({ user, action: "changeNickname" })}>
+					<FolderPen className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+					<span>Change Nickname</span>
+				</DropdownMenuItem> */}
 				{menuType === "admin" ? (
 					<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "removeAdmin" })}>
 						<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
@@ -107,6 +118,54 @@ function getOptions(
 	);
 }
 
+function makeUser(
+	user: User,
+	updatingUser: string | null,
+	setConfirmAction: Dispatch<
+		SetStateAction<{
+			user: User;
+			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+			// | "changeNickname";
+		} | null>
+	>,
+) {
+	return (
+		<div
+			key={user.email}
+			className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
+		>
+			<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+				<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
+					<AvatarImage src={user.image} alt={user.first_name} referrerPolicy="no-referrer" />
+					<AvatarFallback className="text-xs sm:text-sm">
+						{getInitials(user.first_name)}
+					</AvatarFallback>
+				</Avatar>
+				<div className="min-w-0 flex-1">
+					{/* <div className="flex items-center gap-2">
+						<p className="font-medium text-sm sm:text-base truncate">{user.first_name}</p>
+					</div> */}
+					<button
+						type="button"
+						// onClick={() => setEditingUser(user)}
+						className="group flex items-center gap-1 text-left"
+					>
+						<p className="font-medium text-sm sm:text-base truncate transition-colors">
+							{user.first_name}
+						</p>
+						<Pencil className="h-3 w-3 opacity-0 transition-all duration-150 group-hover:opacity-100" />
+						{/* <Pencil className="h-3 w-3 opacity-100 transition-opacity text-muted-foreground" /> */}
+					</button>
+					<p className="text-xs sm:text-sm text-muted-foreground truncate">{user.email}</p>
+				</div>
+			</div>
+			<div className="flex items-center gap-2 shrink-0">
+				{getOptions(user, updatingUser, setConfirmAction, "admin")}
+			</div>
+		</div>
+	);
+}
+
 export default function AllUsersPage() {
 	const [users, setUsers] = useState<User[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -114,6 +173,7 @@ export default function AllUsersPage() {
 	const [confirmAction, setConfirmAction] = useState<{
 		user: User;
 		action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+		// | "changeNickname";
 	} | null>(null);
 
 	const fetchUsers = async () => {
@@ -193,6 +253,9 @@ export default function AllUsersPage() {
 			case "removeFix":
 				await handleUpdateUserPermissions(user.email, "student");
 				break;
+			// case "changeNickname":
+			// 	// await changeNickname(user.email);
+			// 	break;
 		}
 	};
 
@@ -382,38 +445,7 @@ export default function AllUsersPage() {
 						{adminUsers.length === 0 ? (
 							<p className="text-sm text-muted-foreground">No administrators found</p>
 						) : (
-							adminUsers.map((user) => (
-								<div
-									key={user.email}
-									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
-								>
-									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
-											<AvatarImage
-												src={user.image}
-												alt={user.first_name}
-												referrerPolicy="no-referrer"
-											/>
-											<AvatarFallback className="text-xs sm:text-sm">
-												{getInitials(user.first_name)}
-											</AvatarFallback>
-										</Avatar>
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-2">
-												<p className="font-medium text-sm sm:text-base truncate">
-													{user.first_name}
-												</p>
-											</div>
-											<p className="text-xs sm:text-sm text-muted-foreground truncate">
-												{user.email}
-											</p>
-										</div>
-									</div>
-									<div className="flex items-center gap-2 shrink-0">
-										{getOptions(user, updatingUser, setConfirmAction, "admin")}
-									</div>
-								</div>
-							))
+							adminUsers.map((user) => makeUser(user, updatingUser, setConfirmAction))
 						)}
 					</CardContent>
 				</Card>

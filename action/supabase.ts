@@ -476,6 +476,21 @@ async function getCsvAvailabilities(availabilityData: Availability[]) {
 	return csvContent;
 }
 
+async function changeNickname(email: string, newNickname: string) {
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.update({ nickname: newNickname })
+		.eq("email", email)
+		.select();
+
+	if (error) {
+		console.error("Error updating nickname:", error);
+		return null;
+	}
+
+	return data as User[];
+}
+
 export {
 	getAllowData,
 	getTotalStudents,
@@ -499,4 +514,5 @@ export {
 	insertShift,
 	getAllShifts,
 	clearShifts,
+	changeNickname,
 };
