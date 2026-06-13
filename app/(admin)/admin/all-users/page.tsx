@@ -48,7 +48,7 @@ export default function AllUsersPage() {
 
 	const fetchUsers = async () => {
 		const userData = await getAllUsers();
-		setUsers(userData);
+		setUsers(userData.sort((a, b) => a.first_name.localeCompare(b.first_name)));
 		setLoading(false);
 	};
 
