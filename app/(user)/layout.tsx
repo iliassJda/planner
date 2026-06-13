@@ -35,6 +35,7 @@ export default async function RootLayout({
 	const user: User = {
 		email: session.user.email as string,
 		first_name: session.user.name?.split(" ")[0] as string,
+		nickname: "" as string, // Nickname is not currently stored in the session, so we initialize it as an empty string. It can be updated later when we fetch user data from the database.
 		image: session.user.image as string,
 		role: "student",
 		region: { id: 1, name: "Bruxelles" } as Region, // Region is hardcoded for now but should not be
