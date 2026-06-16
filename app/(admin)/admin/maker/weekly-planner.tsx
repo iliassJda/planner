@@ -1,11 +1,9 @@
 "use client";
 
-// import * as React from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { getInitials } from "@/help_functions";
-import { cn } from "@/lib/utils";
-import { useUser } from "@/context/user-context";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -19,10 +17,10 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	Select,
 	SelectContent,
@@ -39,822 +37,838 @@ import {
 	getAllShifts,
 	clearShifts,
 } from "@/action/supabase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, format } from "date-fns";
-import { RefreshCw, Save, CalendarPlus } from "lucide-react";
+import { RefreshCw, Save, Trash2, CalendarPlus, X, ChevronDown, Palette } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useUser } from "@/context/user-context";
 
 import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift } from "@/types";
+import { getInitials, AVAILABILITY_STYLES, getWeekStartDate } from "@/help_functions";
 
-import { AVAILABILITY_STYLES, getWeekStartDate, getAvailabilityForDate } from "@/help_functions";
-
-interface WeeklyPlannerProps {
-	file: File | null;
-}
-
-const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, index) => {
-	const totalMinutes = 9 * 60 + index * 15;
-	const hour = Math.floor(totalMinutes / 60);
-	const minute = totalMinutes % 60;
-	return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+// 9:00 → 22:00 in 15-min steps
+const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, i) => {
+	const mins = 9 * 60 + i * 15;
+	const h = Math.floor(mins / 60);
+	const m = mins % 60;
+	return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 });
 
-export default function WeeklyPlanner({}: WeeklyPlannerProps) {
+function shiftHours(start: string, end: string) {
+	const [sh, sm] = start.split(":").map(Number);
+	const [eh, em] = end.split(":").map(Number);
+	return (eh * 60 + em - (sh * 60 + sm)) / 60;
+}
+
+function fmt(h: number) {
+	if (h <= 0) return "";
+	const whole = Math.floor(h);
+	const mins = Math.round((h - whole) * 60);
+	return mins > 0 ? `${whole}h${mins.toString().padStart(2, "0")}` : `${whole}h`;
+}
+
+// Inline CSS colors — avoids Tailwind static-scan issues with dynamic class names.
+// bg matches Excel fill colors; text/sub are dark enough to be readable on top.
+type StoreColor = { bg: string; text: string; sub: string };
+
+const NAMED_STORE_COLORS: Array<StoreColor & { keywords: string[] }> = [
+	{ keywords: ["galerie"],          bg: "#fecdd3", text: "#881337", sub: "#be123c" }, // pink
+	{ keywords: ["beurre"],           bg: "#ddd6fe", text: "#3b0764", sub: "#5b21b6" }, // violet/purple
+	{ keywords: ["grand", "place"],   bg: "#bbf7d0", text: "#14532d", sub: "#166534" }, // green
+	{ keywords: ["atelier"],          bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
+	{ keywords: ["mad", "madeleine"], bg: "#fed7aa", text: "#7c2d12", sub: "#9a3412" }, // orange
+	{ keywords: ["louise"],           bg: "#bae6fd", text: "#0c4a6e", sub: "#075985" }, // sky
+];
+
+const FALLBACK_STORE_COLORS: StoreColor[] = [
+	{ bg: "#99f6e4", text: "#042f2e", sub: "#134e4a" }, // teal
+	{ bg: "#fda4af", text: "#4c0519", sub: "#9f1239" }, // rose
+	{ bg: "#a5b4fc", text: "#1e1b4b", sub: "#312e81" }, // indigo
+	{ bg: "#d9f99d", text: "#1a2e05", sub: "#3f6212" }, // lime
+];
+
+type EmployeeRow = {
+	user: User;
+	days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
+	targetHours: number | null;
+};
+
+export default function WeeklyPlanner({}: { file: File | null }) {
 	const user = useUser();
-	const [currentWeek, setCurrentWeek] = useState<string>("null");
+
+	const [currentWeek, setCurrentWeek] = useState("null");
 	const [weeks, setWeeks] = useState<Week[]>([]);
-	const [isLoadingWeeks, setIsLoadingWeeks] = useState(true);
+	const [isLoading, setIsLoading] = useState(true);
 	const [availabilityData, setAvailabilityData] = useState<Availability[]>([]);
 	const [stores, setStores] = useState<Store[]>([]);
 	const [users, setUsers] = useState<User[]>([]);
+	const [assignedShifts, setAssignedShifts] = useState<Shift[]>([]);
+	const [isSaving, setIsSaving] = useState(false);
+	const [isClearing, setIsClearing] = useState(false);
+
+	// Shift dialog
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const [selectedStudent, setSelectedStudent] = useState<{
-		user: User;
-		days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
-	} | null>(null);
+	const [selectedRow, setSelectedRow] = useState<EmployeeRow | null>(null);
 	const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-	const [selectedStoreId, setSelectedStoreId] = useState<number>(0);
+	const [selectedStoreId, setSelectedStoreId] = useState(0);
 	const [shiftStart, setShiftStart] = useState("09:00");
 	const [shiftEnd, setShiftEnd] = useState("17:00");
-	const [customShiftStart, setCustomShiftStart] = useState("");
-	const [customShiftEnd, setCustomShiftEnd] = useState("");
-	const [assignedShifts, setAssignedShifts] = useState<Shift[]>([]);
-	// useState<
-	// 	Array<{
-	// 		id?: string;
-	// 		email: string;
-	// 		shift_date: string;
-	// 		store_id: number;
-	// 		start_time: string;
-	// 		end_time: string;
-	// 		hours: number;
-	// 	}>
-	// >([]);
-	const [saveMessage, setSaveMessage] = useState<string>("");
-	const [clearDialog, setClearDialog] = useState(false);
-	// const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
-	// 	startOfWeek(new Date(), { weekStartsOn: 1 }),
-	// );
+	const [hasBreak, setHasBreak] = useState(false);
 
-	const getWeeklyAvailability = (week_label: string) => {
-		const correctWeek = weeks.find((week) => week.week_label === week_label);
-		if (!correctWeek) return { weekDays: [], weekStudents: [] };
+	// Clear dialog
+	const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
-		const weekStart = getWeekStartDate(correctWeek.week_number, correctWeek.year);
-		// console.log("THis is the start of the week: ", weekStart);
-		const weekDays = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekStart, i));
-		// console.log("Weekdays -> ", weekDays);
-		const studentMap = new Map<
-			string,
-			{
-				user: User;
-				days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
-			}
-		>();
-
-		// For each day in the week
-		weekDays.forEach((date) => {
-			// console.log("For this day: ", date);
-			const dayData = getAvailabilityForDate(date, availabilityData, users, weeks);
-			// console.log("Day data -> ", dayData);
-			dayData.forEach((entry) => {
-				if (!studentMap.has(entry.user.email)) {
-					studentMap.set(entry.user.email, {
-						user: entry.user,
-						days: {},
-					});
-				}
-				const student = studentMap.get(entry.user.email);
-				// console.log("student? -> ", student);
-				if (student) {
-					// console.log("YESSS DATA");
-					student.days[format(date, "yyyy-MM-dd")] = {
-						availability: entry.availability,
-						hours: entry.hours,
-						week_id: entry.week_id,
-					};
-				}
-			});
-		});
-		const studentResult = Array.from(studentMap.values());
-		// console.log("For ", week_label);
-		// console.log("This is the studentResult => ", studentResult);
-
-		return { weekDays, weekStudents: studentResult };
-	};
-
-	const handleCellClick = (student: typeof selectedStudent, day: Date) => {
-		const dayKey = format(day, "yyyy-MM-dd");
-		const existingShift = assignedShifts.find(
-			(s) => s.email === student?.user.email && s.shift_date === dayKey,
-		);
-
-		setSelectedStoreId(existingShift?.store_id ?? stores[0]?.id ?? 0);
-		setShiftStart(existingShift?.start_time ?? "09:00");
-		setShiftEnd(existingShift?.end_time ?? "17:00");
-		setCustomShiftStart("");
-		setCustomShiftEnd("");
-		setSelectedStudent(student);
-		setSelectedDay(day);
-		setDialogOpen(true);
-	};
-
-	const getShiftsForCurrentWeek = () => {
-		if (currentWeek === "null") return [];
-
-		const week = weeks.find((w) => w.week_label === currentWeek);
-		if (!week) return [];
-
-		// Get the start and end dates of the week
-		const weekStart = getWeekStartDate(week.week_number, week.year);
-		const weekEnd = addDays(weekStart, 6);
-
-		return assignedShifts.filter((shift) => {
-			const shiftDate = new Date(shift.shift_date);
-			return shiftDate >= weekStart && shiftDate <= weekEnd;
-		});
-	};
-
-	const getShiftDurationHours = (start: string, end: string) => {
-		const [startHour, startMinute] = start.split(":").map(Number);
-		const [endHour, endMinute] = end.split(":").map(Number);
-		const startTotalMinutes = startHour * 60 + startMinute;
-		const endTotalMinutes = endHour * 60 + endMinute;
-		return (endTotalMinutes - startTotalMinutes) / 60;
-	};
-
-	const getAssignedHoursForStudent = (email: string, weekDays: Date[]) => {
-		const weekDayStrings = weekDays.map((day) => format(day, "yyyy-MM-dd"));
-		return assignedShifts
-			.filter((s) => s.email === email && weekDayStrings.includes(s.shift_date))
-			.reduce((sum, shift) => sum + shift.hours, 0);
-	};
-
-	const validateTimeFormat = (time: string): boolean => {
-		const timeRegex = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
-		return timeRegex.test(time);
-	};
-
-	const effectiveStart =
-		customShiftStart && validateTimeFormat(customShiftStart) ? customShiftStart : shiftStart;
-	const effectiveEnd =
-		customShiftEnd && validateTimeFormat(customShiftEnd) ? customShiftEnd : shiftEnd;
-	const effectiveIsInvalid = effectiveEnd <= effectiveStart;
-
-	const handleSaveShift = () => {
-		if (!selectedStudent?.user.email || !selectedDay || effectiveIsInvalid || !selectedStoreId) {
-			return;
-		}
-
-		const email = selectedStudent.user.email;
-		const dayKey = format(selectedDay, "yyyy-MM-dd");
-		const hours = getShiftDurationHours(effectiveStart, effectiveEnd);
-
-		setAssignedShifts((prev) => {
-			// Check if shift already exists for this email and date
-			const existingIndex = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
-
-			if (existingIndex !== -1) {
-				// Update existing shift
-				const updated = [...prev];
-				updated[existingIndex] = {
-					...updated[existingIndex],
-					store_id: selectedStoreId,
-					start_time: effectiveStart,
-					end_time: effectiveEnd,
-					hours,
-				};
-				return updated;
-			} else {
-				// Add new shift with temporary ID (negative numbers for new unsaved shifts)
-				const tempId = Math.min(...prev.map((s) => s.id || 0), 0) - 1;
-				return [
-					...prev,
-					{
-						id: tempId,
-						email,
-						shift_date: dayKey,
-						store_id: selectedStoreId,
-						start_time: effectiveStart,
-						end_time: effectiveEnd,
-						hours,
-					},
-				];
-			}
-		});
-
-		setDialogOpen(false);
-	};
-
-	const hasAssignedShifts = assignedShifts.length > 0;
-
-	const handleSaveAllShifts = async () => {
-		if (!hasAssignedShifts) {
-			setSaveMessage("No shifts to save yet.");
-			return;
-		}
-
-		// console.log("These are the shifts for: ", assignedShifts);
-
-		try {
-			// Convert flat array to nested format for insertShift
-			const nestedFormat: Record<string, Record<string, ShiftAssignment>> = {};
-			assignedShifts.forEach((shift) => {
-				if (!nestedFormat[shift.email]) {
-					nestedFormat[shift.email] = {};
-				}
-				nestedFormat[shift.email][shift.shift_date] = {
-					storeId: shift.store_id,
-					start: shift.start_time,
-					end: shift.end_time,
-					hours: shift.hours,
-				};
-			});
-			const result = await insertShift(nestedFormat);
-			setSaveMessage(`Saved ${result.length} user shifts`);
-		} catch {
-			setSaveMessage("Could not save shifts... Try again");
-		}
-	};
-
-	const handleClear = () => {
-		setClearDialog(true);
-	};
-
-	const handleConfirmClear = async () => {
-		const shiftsToDelete = getShiftsForCurrentWeek();
-
-		if (shiftsToDelete.length === 0) {
-			setSaveMessage("No shifts to clear for this week.");
-			setClearDialog(false);
-			return;
-		}
-
-		try {
-			// Convert flat array to nested format for clearShifts
-			// const nestedFormat: Record<string, Record<string, ShiftAssignment>> = {};
-			// shiftsToDelete.forEach((shift) => {
-			// 	if (!nestedFormat[shift.email]) {
-			// 		nestedFormat[shift.email] = {};
-			// 	}
-			// 	nestedFormat[shift.email][shift.shift_date] = {
-			// 		storeId: shift.store_id,
-			// 		start: shift.start_time,
-			// 		end: shift.end_time,
-			// 		hours: shift.hours,
-			// 	};
-			// });
-			await clearShifts(shiftsToDelete);
-			setSaveMessage(`Cleared shifts for ${currentWeek}`);
-		} catch {
-			setSaveMessage("Could not clear shifts");
-		}
-
-		setClearDialog(false);
+	// Color mode
+	const [colorMode, setColorMode] = useState(false);
+	const getStoreColor = (storeId: number): StoreColor | null => {
+		const store = stores.find((s) => s.id === storeId);
+		if (!store) return null;
+		const name = store.name.toLowerCase();
+		const named = NAMED_STORE_COLORS.find((c) => c.keywords.some((kw) => name.includes(kw)));
+		if (named) return named;
+		const idx = stores.findIndex((s) => s.id === storeId);
+		return FALLBACK_STORE_COLORS[idx % FALLBACK_STORE_COLORS.length];
 	};
 
 	useEffect(() => {
 		const fetchData = async () => {
-			if (!user) {
-				setIsLoadingWeeks(false);
-				return;
-			}
-
-			setIsLoadingWeeks(true);
+			if (!user) { setIsLoading(false); return; }
+			setIsLoading(true);
 			try {
-				const data = await getAllWeeks();
-				const availabilities = await getAllAvailability();
-				const stores = await getAllStoresFromRegion(user.region.name);
-				const users = await getAllUsers();
-				const shifts = await getAllShifts();
-				// Sort by year first, then by week_number
-				const sorted = data.sort((a, b) => {
-					if (a.year !== b.year) {
-						return a.year - b.year;
-					}
-					return a.week_number - b.week_number;
-				});
-				// setAssignedShifts(fromFlattenedToRecord(shifts));
+				const [weekData, avails, storeData, userData, shifts] = await Promise.all([
+					getAllWeeks(),
+					getAllAvailability(),
+					getAllStoresFromRegion(user.region.name),
+					getAllUsers(),
+					getAllShifts(),
+				]);
+				setWeeks(
+					weekData.sort((a, b) =>
+						a.year !== b.year ? a.year - b.year : a.week_number - b.week_number,
+					),
+				);
+				setAvailabilityData(avails);
+				setStores(storeData);
+				setSelectedStoreId((cur) => cur || storeData[0]?.id || 0);
+				setUsers(userData);
 				setAssignedShifts(shifts);
-				// setAssignedShifts(
-				// 	shifts.map((shift) => ({
-				// 		id: shift.id.toString(),
-				// 		email: shift.email,
-				// 		shift_date: shift.shift_date,
-				// 		store_id: shift.store_id,
-				// 		start_time: shift.start_time,
-				// 		end_time: shift.end_time,
-				// 		hours: shift.hours,
-				// 	})),
-				// );
-				setWeeks(sorted);
-				setAvailabilityData(availabilities);
-				setStores(stores);
-				setSelectedStoreId((current) => current || stores[0]?.id || 0);
-				setUsers(users);
 			} finally {
-				setIsLoadingWeeks(false);
+				setIsLoading(false);
 			}
 		};
 		fetchData();
 	}, [user]);
 
-	// useEffect(() => {
-	//   try {
-	//     const savedShifts = localStorage.getItem(SHIFTS_STORAGE_KEY);
-	//     if (savedShifts) {
-	//       setAssignedShifts(
-	//         JSON.parse(savedShifts) as Record<string, Record<string, ShiftAssignment>>,
-	//       );
-	//     }
-	//   } catch {
-	//     setSaveMessage("Could not load previously saved shifts.");
-	//   }
-	// }, []);
+	// ── Derived week data ──────────────────────────────────────────────────────
+
+	const weekObj = weeks.find((w) => w.week_label === currentWeek) ?? null;
+	const weekDays = weekObj
+		? [0, 1, 2, 3, 4, 5, 6].map((i) =>
+				addDays(getWeekStartDate(weekObj.week_number, weekObj.year), i),
+			)
+		: [];
+	const weekDayKeys = weekDays.map((d) => format(d, "yyyy-MM-dd"));
+
+	const DAY_KEYS = [
+		"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+	] as const;
+
+	const weekAvails = weekObj
+		? availabilityData.filter((a) => a.week_id === weekObj.id)
+		: [];
+
+	const employeeRows: EmployeeRow[] = [
+		// Fix employees first (no availability, always shown)
+		...users
+			.filter((u) => u.role === "fix")
+			.sort((a, b) =>
+				(a.nickname || a.first_name).localeCompare(b.nickname || b.first_name),
+			)
+			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null })),
+
+		// Students with availability for this week
+		...weekAvails
+			.map((a): EmployeeRow | null => {
+				const u = users.find((u) => u.email === a.email);
+				if (!u || u.role === "fix") return null;
+				const days: EmployeeRow["days"] = {};
+				weekDays.forEach((day, i) => {
+					const key = format(day, "yyyy-MM-dd");
+					days[key] = {
+						availability: a[DAY_KEYS[i]] as DayAvailability,
+						hours: a.hours,
+						week_id: a.week_id,
+					};
+				});
+				return { user: u, days, targetHours: a.hours };
+			})
+			.filter((x): x is EmployeeRow => x !== null)
+			.sort((a, b) =>
+				(a.user.nickname || a.user.first_name).localeCompare(
+					b.user.nickname || b.user.first_name,
+				),
+			),
+	];
+
+	const weekShifts = assignedShifts.filter((s) => weekDayKeys.includes(s.shift_date));
+
+	const shiftsFor = (email: string) => weekShifts.filter((s) => s.email === email);
+	const assignedHours = (email: string) =>
+		shiftsFor(email).reduce((sum, s) => sum + s.hours, 0);
+	const storeHours = (email: string, storeId: number) =>
+		shiftsFor(email)
+			.filter((s) => s.store_id === storeId)
+			.reduce((sum, s) => sum + s.hours, 0);
+	const staffOnDay = (dayKey: string) =>
+		new Set(weekShifts.filter((s) => s.shift_date === dayKey).map((s) => s.email)).size;
+	const totalStoreHours = (storeId: number) =>
+		weekShifts.filter((s) => s.store_id === storeId).reduce((sum, s) => sum + s.hours, 0);
+
+	// ── Dialog helpers ─────────────────────────────────────────────────────────
 
 	const selectedDayKey = selectedDay ? format(selectedDay, "yyyy-MM-dd") : null;
-	const selectedDayAvailability = selectedDayKey
-		? selectedStudent?.days[selectedDayKey]?.availability
+	const existingShift = selectedDayKey
+		? assignedShifts.find(
+				(s) => s.email === selectedRow?.user.email && s.shift_date === selectedDayKey,
+			)
 		: undefined;
-	const dialogDayAvailability: DayAvailability = selectedDayAvailability ?? "not_available";
-	const dialogAvailabilityStyle = AVAILABILITY_STYLES[dialogDayAvailability];
-	const isSelectedDayUnavailable =
-		!selectedDayAvailability || selectedDayAvailability === "not_available";
-	const selectedWeekIdFromDay = selectedDayKey
-		? selectedStudent?.days[selectedDayKey]?.week_id
-		: undefined;
-	const currentWeekId = weeks.find((week) => week.week_label === currentWeek)?.id;
-	const dialogWeekId = selectedWeekIdFromDay ?? currentWeekId;
-	const selectedComment =
-		dialogWeekId && selectedStudent?.user.email
-			? availabilityData
-					.find(
-						(entry) => entry.email === selectedStudent.user.email && entry.week_id === dialogWeekId,
-					)
-					?.comment?.trim() || "No comment provided..."
-			: "No comment provided...";
+	const selectedDayAvail = selectedDayKey ? selectedRow?.days[selectedDayKey]?.availability : undefined;
+	const isInvalid = shiftEnd <= shiftStart;
 
-	if (!user) {
-		return <div className="text-sm text-muted-foreground p-4">No user found.</div>;
-	}
+	const openDialog = (row: EmployeeRow, day: Date) => {
+		const dayKey = format(day, "yyyy-MM-dd");
+		const existing = assignedShifts.find(
+			(s) => s.email === row.user.email && s.shift_date === dayKey,
+		);
+		const start = existing?.start_time ?? "09:00";
+		const end = existing?.end_time ?? "17:00";
+		setSelectedStoreId(existing?.store_id ?? stores[0]?.id ?? 0);
+		setShiftStart(start);
+		setShiftEnd(end);
+		// Detect break from stored net hours vs gross hours, or auto-apply rule for new shifts
+		if (existing) {
+			const gross = shiftHours(existing.start_time, existing.end_time);
+			setHasBreak(Math.abs(gross - existing.hours - 0.5) < 0.01);
+		} else {
+			setHasBreak(shiftHours(start, end) >= 6);
+		}
+		setSelectedRow(row);
+		setSelectedDay(day);
+		setDialogOpen(true);
+	};
+
+	const handleSaveShift = () => {
+		if (!selectedRow || !selectedDay || isInvalid || !selectedStoreId) return;
+		const email = selectedRow.user.email;
+		const dayKey = format(selectedDay, "yyyy-MM-dd");
+		const hours = shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0);
+
+		setAssignedShifts((prev) => {
+			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
+			if (idx !== -1) {
+				const next = [...prev];
+				next[idx] = { ...next[idx], store_id: selectedStoreId, start_time: shiftStart, end_time: shiftEnd, hours };
+				return next;
+			}
+			const tempId = Math.min(...prev.map((s) => s.id), 0) - 1;
+			return [...prev, { id: tempId, email, shift_date: dayKey, store_id: selectedStoreId, start_time: shiftStart, end_time: shiftEnd, hours }];
+		});
+		setDialogOpen(false);
+	};
+
+	const handleRemoveShift = () => {
+		if (!selectedRow || !selectedDayKey) return;
+		setAssignedShifts((prev) =>
+			prev.filter((s) => !(s.email === selectedRow.user.email && s.shift_date === selectedDayKey)),
+		);
+		setDialogOpen(false);
+	};
+
+	const handleSaveSchedule = async () => {
+		if (weekShifts.length === 0) { toast.info("No shifts to save for this week."); return; }
+		setIsSaving(true);
+		try {
+			// Full-replace: clear existing DB entries then re-insert everything
+			const existingDbShifts = weekShifts.filter((s) => s.id > 0);
+			if (existingDbShifts.length > 0) await clearShifts(existingDbShifts);
+
+			const nested: Record<string, Record<string, ShiftAssignment>> = {};
+			weekShifts.forEach((s) => {
+				if (!nested[s.email]) nested[s.email] = {};
+				nested[s.email][s.shift_date] = {
+					storeId: s.store_id,
+					start: s.start_time,
+					end: s.end_time,
+					hours: s.hours,
+				};
+			});
+			await insertShift(nested);
+
+			const refreshed = await getAllShifts();
+			setAssignedShifts(refreshed);
+			toast.success(`Schedule saved — ${weekShifts.length} shift${weekShifts.length !== 1 ? "s" : ""}`);
+		} catch {
+			toast.error("Could not save schedule. Please try again.");
+		} finally {
+			setIsSaving(false);
+		}
+	};
+
+	const handleConfirmClear = async () => {
+		if (weekShifts.length === 0) { toast.info("No shifts to clear."); setClearDialogOpen(false); return; }
+		setIsClearing(true);
+		try {
+			await clearShifts(weekShifts);
+			const refreshed = await getAllShifts();
+			setAssignedShifts(refreshed);
+			toast.success(`Cleared all shifts for ${currentWeek}`);
+		} catch {
+			toast.error("Could not clear shifts. Please try again.");
+		} finally {
+			setIsClearing(false);
+			setClearDialogOpen(false);
+		}
+	};
+
+	// ── Render ─────────────────────────────────────────────────────────────────
+
+	if (!user) return <div className="p-6 text-sm text-muted-foreground">No user found.</div>;
 
 	return (
-		<div className="flex flex-col space-y-4 w-full max-w-7xl mx-auto pb-10">
-			<div className="space-y-1 mb-2">
-				<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Planner Maker</h1>
-				<p className="text-muted-foreground text-sm">
-					Create, edit, and manage your weekly schedules
-				</p>
+		<div className="flex flex-col gap-6 w-full max-w-[1800px] mx-auto pb-12 px-4 sm:px-6">
+			{/* Page header */}
+			<div>
+				<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Planner</h1>
+				<p className="text-muted-foreground text-sm mt-0.5">Build and manage weekly staff schedules</p>
 			</div>
 
 			{/* Toolbar */}
-			<div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm">
-				{isLoadingWeeks ? (
-					<div className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
+			<div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 sm:p-4 rounded-xl border bg-card shadow-sm">
+				{isLoading ? (
+					<div className="flex items-center gap-2 text-sm text-muted-foreground">
 						<RefreshCw className="h-4 w-4 animate-spin" />
-						Loading context...
+						Loading…
 					</div>
 				) : weeks.length > 0 ? (
-					<div className="flex flex-wrap items-center gap-3">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" className="min-w-[140px] justify-between">
-									{currentWeek !== "null" ? currentWeek : "Select a week..."}
-									<span className="opacity-50 text-xs">▼</span>
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent className="w-56" align="start">
-								<DropdownMenuGroup>
-									<DropdownMenuLabel>Available Weeks</DropdownMenuLabel>
-									<DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
-										{weeks.map((week) => (
-											<DropdownMenuRadioItem key={week.id} value={week.week_label}>
-												{week.week_label}
-											</DropdownMenuRadioItem>
-										))}
-									</DropdownMenuRadioGroup>
-								</DropdownMenuGroup>
-							</DropdownMenuContent>
-						</DropdownMenu>
-
-						{saveMessage && (
-							<span className="text-sm font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400 px-3 py-1 rounded-full animate-in fade-in">
-								{saveMessage}
-							</span>
-						)}
-					</div>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="outline" className="min-w-40 justify-between gap-2">
+								{currentWeek !== "null" ? currentWeek : "Select a week…"}
+								<ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent className="w-56" align="start">
+							<DropdownMenuGroup>
+								<DropdownMenuLabel>Available weeks</DropdownMenuLabel>
+								<DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
+									{weeks.map((w) => (
+										<DropdownMenuRadioItem key={w.id} value={w.week_label}>
+											{w.week_label}
+										</DropdownMenuRadioItem>
+									))}
+								</DropdownMenuRadioGroup>
+							</DropdownMenuGroup>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				) : (
-					<div className="text-sm text-muted-foreground">No available weeks configured</div>
+					<p className="text-sm text-muted-foreground">No weeks configured</p>
 				)}
 
-				<div className="flex items-center gap-2 w-full sm:w-auto">
+				<div className="flex items-center gap-2 shrink-0">
+					{currentWeek !== "null" && (
+						<span className="text-xs text-muted-foreground hidden sm:block">
+							{weekShifts.length} shift{weekShifts.length !== 1 ? "s" : ""} planned
+						</span>
+					)}
 					<Button
-						variant="secondary"
-						onClick={handleClear}
-						disabled={!hasAssignedShifts || currentWeek === "null"}
-						className="flex-1 sm:flex-none"
+						variant={colorMode ? "secondary" : "outline"}
+						size="sm"
+						onClick={() => setColorMode((v) => !v)}
+						title="Toggle store colours"
 					>
-						Clear Data
+						<Palette className="h-3.5 w-3.5 mr-1.5" />
+						Colours
 					</Button>
 					<Button
-						variant="default"
-						onClick={handleSaveAllShifts}
-						disabled={!hasAssignedShifts || currentWeek === "null"}
-						className="flex-1 sm:flex-none shadow-sm"
+						variant="outline"
+						size="sm"
+						onClick={() => setClearDialogOpen(true)}
+						disabled={weekShifts.length === 0 || currentWeek === "null"}
 					>
-						<Save className="mr-2 h-4 w-4" />
-						Save Schedule
+						<Trash2 className="h-3.5 w-3.5 mr-1.5" />
+						Clear week
+					</Button>
+					<Button
+						size="sm"
+						onClick={handleSaveSchedule}
+						disabled={weekShifts.length === 0 || currentWeek === "null" || isSaving}
+					>
+						<Save className="h-3.5 w-3.5 mr-1.5" />
+						{isSaving ? "Saving…" : "Save schedule"}
 					</Button>
 				</div>
 			</div>
 
-			{currentWeek !== "null" ? (
-				<Card className="border shadow-sm overflow-hidden flex flex-col">
-					{/* Week Navigation */}
-					<CardHeader className="bg-muted/30 border-b py-3 px-4">
-						<CardTitle className="text-lg font-semibold text-center flex items-center justify-center gap-2">
-							{/* <span className="bg-primary/10 text-primary p-1.5 rounded-md">
-								<CalendarPlus className="h-4 w-4" />
-							</span> */}
-							{currentWeek} Schedule
-						</CardTitle>
-					</CardHeader>
+			{/* Empty state */}
+			{currentWeek === "null" && !isLoading && (
+				<div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+					<div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center">
+						<CalendarPlus className="h-7 w-7 text-muted-foreground" />
+					</div>
+					<div>
+						<p className="font-semibold text-foreground">No week selected</p>
+						<p className="text-sm text-muted-foreground mt-1">Choose a week from the dropdown above to start building the schedule.</p>
+					</div>
+				</div>
+			)}
 
-					<CardContent className="p-0 overflow-hidden">
-						{(() => {
-							const { weekDays, weekStudents } = getWeeklyAvailability(currentWeek);
+			{/* Planning table */}
+			{currentWeek !== "null" && weekDays.length > 0 && (
+				<div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+					{/* Table caption */}
+					<div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+						<h2 className="font-semibold text-sm">{currentWeek}</h2>
+						<span className="text-xs text-muted-foreground">
+							{employeeRows.length} employees
+						</span>
+					</div>
 
-							return (
-								<div className="w-full overflow-x-auto bg-card rounded-b-xl">
-									<table className="w-full border-collapse text-xs sm:text-sm">
-										<thead>
-											<tr>
-												<th className="sticky left-0 border-b border-border/60 bg-muted/20 p-3 sm:p-4 text-left font-medium w-36 sm:w-48 z-20 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">
-													<div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-														Employee
-													</div>
-												</th>
-												{weekDays.map((day) => (
-													<th
-														key={day.toISOString()}
-														className="border-b border-l border-border/60 bg-muted/20 p-2 sm:p-3 text-center w-24 sm:w-32 shrink-0"
-													>
-														<div className="font-semibold text-sm sm:text-base text-foreground">
-															{format(day, "EEE")}
-														</div>
-														<div className="text-[11px] sm:text-xs text-muted-foreground font-medium mt-0.5">
-															{format(day, "MMM d")}
-														</div>
-													</th>
-												))}
-											</tr>
-										</thead>
-										<tbody>
-											{weekStudents.length > 0 ? (
-												weekStudents.map((entry) => (
-													<tr
-														key={entry.user.email}
-														className="group hover:bg-muted/30 transition-colors"
-													>
-														<td className="sticky left-0 border-b border-border/60 bg-card group-hover:bg-muted/30 p-2 sm:p-3 z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)] transition-colors">
-															<div className="flex items-center gap-2 sm:gap-3">
-																<Avatar className="h-8 w-8 sm:h-10 sm:w-10 border shadow-sm shrink-0">
-																	<AvatarImage
-																		src={entry.user.image}
-																		alt={entry.user.first_name}
-																		referrerPolicy="no-referrer"
-																	/>
-																	<AvatarFallback className="text-[10px] sm:text-xs font-medium bg-primary/5 text-primary">
-																		{getInitials(entry.user.first_name)}
-																	</AvatarFallback>
-																</Avatar>
-																<div className="min-w-0 flex-1 flex flex-col justify-center">
-																	<p className="text-sm font-semibold truncate text-foreground leading-tight">
-																		{entry.user.first_name}
-																	</p>
-																	{(() => {
-																		const firstDay = weekDays.find(
-																			(d) => entry.days[format(d, "yyyy-MM-dd")],
-																		);
-																		const firstDayData = firstDay
-																			? entry.days[format(firstDay, "yyyy-MM-dd")]
-																			: undefined;
-																		const targetHours = firstDayData?.hours;
-																		const assignedHours = getAssignedHoursForStudent(
-																			entry.user.email,
-																			weekDays,
-																		);
+					<div className="overflow-x-auto">
+						<table className="w-full border-collapse text-xs min-w-[900px]">
+							{/* ── Column group widths ── */}
+							<colgroup>
+								<col className="w-44" />
+								{weekDays.map((d) => <col key={d.toISOString()} className="w-28" />)}
+								{stores.map((s) => <col key={s.id} className="w-16" />)}
+								<col className="w-16" />
+								<col className="w-16" />
+							</colgroup>
 
-																		// Status colors based on assignment vs target
-																		let hoursColorClass = "text-muted-foreground";
-																		if (targetHours && targetHours > 0) {
-																			if (assignedHours === targetHours)
-																				hoursColorClass = "text-emerald-600 dark:text-emerald-400";
-																			else if (assignedHours > targetHours)
-																				hoursColorClass = "text-amber-600 dark:text-amber-400";
-																		}
+							<thead>
+								<tr className="border-b bg-muted/20">
+									{/* Employee header */}
+									<th className="sticky left-0 z-20 bg-muted/20 text-left px-3 py-2.5 font-semibold text-[10px] uppercase tracking-widest text-muted-foreground border-r">
+										Employee
+									</th>
+									{/* Day headers */}
+									{weekDays.map((day) => (
+										<th key={day.toISOString()} className="px-2 py-2.5 text-center font-semibold border-r">
+											<div className="text-foreground text-[11px]">{format(day, "EEE").toUpperCase()}</div>
+											<div className="text-muted-foreground font-normal text-[10px] mt-0.5">{format(day, "d MMM")}</div>
+										</th>
+									))}
+									{/* Store headers */}
+									{stores.map((store) => {
+										const color = getStoreColor(store.id);
+										return (
+											<th
+												key={store.id}
+												className="px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-muted-foreground"
+												title={store.name}
+											>
+												<div className="flex flex-col items-center gap-1">
+													{colorMode && color && (
+														<span className="h-2 w-2 rounded-full block" style={{ backgroundColor: color.bg, outline: `2px solid ${color.text}`, outlineOffset: "-2px" }} />
+													)}
+													<span className="truncate block max-w-14 mx-auto">
+														{store.name.length > 7 ? store.name.slice(0, 6) + "…" : store.name}
+													</span>
+												</div>
+											</th>
+										);
+									})}
+									{/* ABSENT */}
+									<th className="px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+										Absent
+									</th>
+									{/* TOTAL */}
+									<th className="px-1 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide text-muted-foreground">
+										Total
+									</th>
+								</tr>
+							</thead>
 
-																		return (
-																			<div className="mt-0.5 flex items-center gap-1.5">
-																				<span
-																					className={cn(
-																						"text-[10px] sm:text-xs font-medium truncate",
-																						hoursColorClass,
-																					)}
-																				>
-																					{assignedHours}h{" "}
-																					<span className="opacity-70 font-normal">assigned</span>
-																					{targetHours != null && targetHours > 0
-																						? ` / ${targetHours}h`
-																						: ""}
-																				</span>
-																			</div>
-																		);
-																	})()}
-																</div>
-															</div>
-														</td>
-														{weekDays.map((day) => {
-															const dayKey = format(day, "yyyy-MM-dd");
-															const dayAvailability = entry.days[dayKey];
-															const availabilityStyle = dayAvailability
-																? AVAILABILITY_STYLES[dayAvailability.availability]
-																: null;
-															const isUnavailableDay =
-																!dayAvailability ||
-																dayAvailability.availability === "not_available";
-															const savedShift = assignedShifts.find(
-																(s) => s.email === entry.user.email && s.shift_date === dayKey,
-															);
-															const savedStoreName = savedShift
-																? stores.find((store) => store.id === savedShift.store_id)?.name
-																: undefined;
-															return (
-																<td
-																	key={dayKey}
-																	onClick={() => handleCellClick(entry, day)}
-																	className="relative border-b border-l border-border/60 p-1.5 sm:p-2 text-center h-20 sm:h-24 w-24 sm:w-32 shrink-0 cursor-pointer hover:bg-primary/5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-20"
-																>
-																	{isUnavailableDay ? (
-																		<div className="pointer-events-none absolute inset-0 bg-repeating-linear-gradient-45 from-transparent to-transparent bg-[length:10px_10px] opacity-10 bg-slate-400 dark:bg-slate-600" />
-																	) : null}
+							<tbody>
+								{employeeRows.length === 0 ? (
+									<tr>
+										<td
+											colSpan={1 + 7 + stores.length + 2}
+											className="py-14 text-center text-muted-foreground text-sm"
+										>
+											No employees or availability data for this week
+										</td>
+									</tr>
+								) : (
+									<>
+										{employeeRows.map((entry, idx) => {
+											const assigned = assignedHours(entry.user.email);
+											const target = entry.targetHours;
+											const absent = target != null ? Math.max(0, target - assigned) : null;
+											const isOver = target != null && assigned > target;
+											const isMatch = target != null && assigned === target && assigned > 0;
+											const displayName = entry.user.nickname || entry.user.first_name;
+											const rowBg = idx % 2 === 0 ? "bg-card" : "bg-muted/[0.03]";
 
-																	{availabilityStyle ? (
-																		<div
-																			className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-sm bg-background/80 backdrop-blur-sm px-1.5 py-0.5 shadow-sm border border-border/50"
-																			title={availabilityStyle.label}
-																		>
-																			<span
-																				className={cn(
-																					"h-1.5 w-1.5 rounded-full opacity-100",
-																					availabilityStyle.dot,
-																				)}
-																			/>
-																			<span className="text-[9px] font-medium leading-none text-foreground/80">
-																				{availabilityStyle.short}
-																			</span>
-																		</div>
-																	) : null}
-
-																	{savedShift ? (
-																		<div className="relative z-10 flex h-full flex-col items-center justify-center pt-3">
-																			<div className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 w-full max-w-[90%] shadow-sm flex flex-col gap-0.5">
-																				<span className="text-[11px] sm:text-xs font-bold font-mono tracking-tight leading-none">
-																					{savedShift.start_time} - {savedShift.end_time}
-																				</span>
-																				{savedStoreName && (
-																					<span className="text-[9px] sm:text-[10px] font-medium opacity-80 leading-none truncate w-full">
-																						{savedStoreName}
-																					</span>
-																				)}
-																			</div>
-																		</div>
-																	) : (
-																		<div className="relative z-10 h-full w-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-																			<div className="bg-muted rounded-md p-1.5 text-muted-foreground">
-																				<CalendarPlus className="h-4 w-4" />
-																			</div>
-																		</div>
-																	)}
-																</td>
-															);
-														})}
-													</tr>
-												))
-											) : (
-												<tr>
+											return (
+												<tr
+													key={entry.user.email}
+													className={cn(
+														"group border-b transition-colors hover:bg-muted/10",
+														rowBg,
+														entry.user.role === "fix" && "border-l-2 border-l-purple-400/50",
+													)}
+												>
+													{/* Employee name */}
 													<td
-														colSpan={8}
-														className="border-b p-4 sm:p-8 text-center text-xs sm:text-base text-muted-foreground"
+														className={cn(
+															"sticky left-0 z-10 border-r px-3 py-2 transition-colors",
+															rowBg,
+															"group-hover:bg-muted/10",
+														)}
 													>
-														No availabilities for this week
+														<div className="flex items-center gap-2">
+															<Avatar className="h-7 w-7 shrink-0 border">
+																<AvatarFallback className="text-[9px] font-bold bg-primary/5 text-primary">
+																	{getInitials(displayName)}
+																</AvatarFallback>
+															</Avatar>
+															<div className="min-w-0">
+																<p className="font-semibold truncate text-[11px] leading-tight">{displayName}</p>
+																<p
+																	className={cn(
+																		"text-[9px] leading-tight font-medium mt-0.5",
+																		isMatch
+																			? "text-emerald-600 dark:text-emerald-400"
+																			: isOver
+																				? "text-amber-600 dark:text-amber-400"
+																				: "text-muted-foreground",
+																	)}
+																>
+																	{assigned > 0
+																		? `${fmt(assigned)} assigned${target != null ? ` / ${fmt(target)}` : ""}`
+																		: target != null
+																			? `0 / ${fmt(target)}`
+																			: "No target"}
+																</p>
+															</div>
+														</div>
+													</td>
+
+													{/* Day cells */}
+													{weekDays.map((day) => {
+														const dayKey = format(day, "yyyy-MM-dd");
+														const dayInfo = entry.days[dayKey];
+														const avail = dayInfo?.availability;
+														const availStyle = avail ? AVAILABILITY_STYLES[avail] : null;
+														const isUnavailable = !avail || avail === "not_available";
+														const isFix = entry.user.role === "fix";
+														const shift = assignedShifts.find(
+															(s) => s.email === entry.user.email && s.shift_date === dayKey,
+														);
+														const shiftStore = shift
+															? stores.find((s) => s.id === shift.store_id)
+															: undefined;
+														const shiftColor = shift && colorMode ? getStoreColor(shift.store_id) : null;
+
+														return (
+															<td
+																key={dayKey}
+																onClick={() => openDialog(entry, day)}
+																className={cn(
+																	"relative border-r cursor-pointer transition-colors h-[60px] text-center align-middle p-0",
+																	!shiftColor && isUnavailable && !isFix && !shift && "bg-muted/20 hover:bg-muted/30",
+																	!shiftColor && !shift && !(isUnavailable && !isFix) && "hover:bg-primary/5",
+																	!shiftColor && shift && "hover:bg-primary/[0.07]",
+																)}
+																style={shiftColor ? { backgroundColor: shiftColor.bg } : undefined}
+															>
+																{/* Hatch for unavailable */}
+																{isUnavailable && !isFix && !shift && (
+																	<div className="absolute inset-0 pointer-events-none opacity-[0.07] bg-[repeating-linear-gradient(45deg,#888_0,#888_1px,transparent_0,transparent_50%)] bg-size-[8px_8px]" />
+																)}
+
+																{shift ? (
+																	<div className="relative z-10 flex flex-col items-center justify-center h-full gap-0.5 px-1">
+																		<span
+																			className="font-mono font-bold text-[11px] leading-none tracking-tight"
+																			style={shiftColor ? { color: shiftColor.text } : undefined}
+																		>
+																			{shift.start_time}–{shift.end_time}
+																		</span>
+																		<span
+																			className="text-[9px] leading-none text-muted-foreground"
+																			style={shiftColor ? { color: shiftColor.sub } : undefined}
+																		>
+																			{fmt(shift.hours)}
+																		</span>
+																		{shiftStore && (
+																			<span
+																				className="text-[9px] font-semibold leading-none truncate max-w-[90px] px-0.5 text-primary/70"
+																				style={shiftColor ? { color: shiftColor.sub } : undefined}
+																			>
+																				{shiftStore.name}
+																			</span>
+																		)}
+																	</div>
+																) : (
+																	<div className="relative z-10 flex flex-col items-center justify-center h-full gap-0.5">
+																		{availStyle && !isUnavailable && (
+																			<span className={cn("text-[10px] font-semibold", availStyle.color)}>
+																				{availStyle.short}
+																			</span>
+																		)}
+																		<div className="opacity-0 group-hover:opacity-60 transition-opacity">
+																			<CalendarPlus className="h-3 w-3 text-muted-foreground" />
+																		</div>
+																	</div>
+																)}
+															</td>
+														);
+													})}
+
+													{/* Store hour columns */}
+													{stores.map((store) => {
+														const h = storeHours(entry.user.email, store.id);
+														return (
+															<td key={store.id} className="border-r px-1 py-2 text-center">
+																{h > 0 ? (
+																	<span className="text-[11px] font-semibold text-foreground">{fmt(h)}</span>
+																) : (
+																	<span className="text-muted-foreground/30 text-[11px]">—</span>
+																)}
+															</td>
+														);
+													})}
+
+													{/* Absent */}
+													<td className="border-r px-1 py-2 text-center">
+														{absent != null && absent > 0 ? (
+															<span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+																{fmt(absent)}
+															</span>
+														) : isMatch ? (
+															<span className="text-[11px] text-emerald-500">✓</span>
+														) : (
+															<span className="text-muted-foreground/30 text-[11px]">—</span>
+														)}
+													</td>
+
+													{/* Total */}
+													<td className="px-1 py-2 text-center">
+														{target != null ? (
+															<span className="text-[11px] font-semibold text-foreground">{fmt(target)}</span>
+														) : (
+															<span className="text-muted-foreground/30 text-[11px]">—</span>
+														)}
 													</td>
 												</tr>
-											)}
-										</tbody>
-									</table>
-								</div>
-							);
-						})()}
-					</CardContent>
-				</Card>
-			) : null}
+											);
+										})}
 
-			{/* Cell Dialog */}
+										{/* Summary row */}
+										<tr className="border-t-2 border-border/60 bg-muted/20 font-semibold">
+											<td className="sticky left-0 z-10 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground border-r">
+												Staff / Total
+											</td>
+											{weekDays.map((day) => {
+												const dayKey = format(day, "yyyy-MM-dd");
+												const count = staffOnDay(dayKey);
+												return (
+													<td key={dayKey} className="border-r px-1 py-2 text-center">
+														{count > 0 ? (
+															<span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold mx-auto">
+																{count}
+															</span>
+														) : (
+															<span className="text-muted-foreground/30 text-[11px]">0</span>
+														)}
+													</td>
+												);
+											})}
+											{stores.map((store) => {
+												const total = totalStoreHours(store.id);
+												return (
+													<td key={store.id} className="border-r px-1 py-2 text-center text-foreground text-[11px]">
+														{total > 0 ? fmt(total) : <span className="text-muted-foreground/30">—</span>}
+													</td>
+												);
+											})}
+											<td className="border-r px-1 py-2 text-center text-muted-foreground/40 text-[11px]">—</td>
+											<td className="px-1 py-2 text-center text-foreground text-[11px]">
+												{fmt(weekShifts.reduce((s, sh) => s + sh.hours, 0))}
+											</td>
+										</tr>
+									</>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			)}
+
+			{/* ── Shift dialog ─────────────────────────────────────────────── */}
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogContent className="max-w-md">
+				<DialogContent className="max-w-sm">
 					<DialogHeader>
-						<DialogTitle>
-							{selectedStudent?.user.first_name} -{" "}
-							{selectedDay ? format(selectedDay, "EEEE, MMMM d, yyyy") : ""}
+						<DialogTitle className="text-base leading-snug">
+							{selectedRow?.user.nickname || selectedRow?.user.first_name}
+							<span className="text-muted-foreground font-normal ml-1 text-sm">
+								· {selectedDay ? format(selectedDay, "EEE d MMM") : ""}
+							</span>
 						</DialogTitle>
 						<DialogDescription>
-							{isSelectedDayUnavailable
-								? "This student is not available on this day."
-								: "Add or edit shift information for this student on this day"}
+							{existingShift ? "Edit or remove the assigned shift." : "Assign a shift for this slot."}
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="space-y-4 py-4">
-						<div className="flex items-center gap-3 pb-4 border-b">
-							<Avatar className="h-10 w-10">
-								<AvatarImage
-									src={selectedStudent?.user.image}
-									alt={selectedStudent?.user.first_name}
-									referrerPolicy="no-referrer"
-								/>
-								<AvatarFallback className="text-sm">
-									{getInitials(selectedStudent?.user.first_name || "")}
-								</AvatarFallback>
-							</Avatar>
-							<div>
-								<p className="font-medium">{selectedStudent?.user.first_name}</p>
-								<p className="text-sm text-muted-foreground">{selectedStudent?.user.email}</p>
+					{/* Availability badge (students only) */}
+					{selectedDayAvail && (
+						<div>
+							{(() => {
+								const style = AVAILABILITY_STYLES[selectedDayAvail];
+								return (
+									<span
+										className={cn(
+											"inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 border bg-muted",
+										)}
+									>
+										<span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
+										{style.label}
+									</span>
+								);
+							})()}
+						</div>
+					)}
+
+					<div className="space-y-3 pt-1">
+						{/* Store */}
+						<div className="space-y-1.5">
+							<label className="text-xs font-medium text-muted-foreground">Store</label>
+							<Select
+								value={selectedStoreId.toString()}
+								onValueChange={(v) => setSelectedStoreId(Number(v))}
+							>
+								<SelectTrigger className="w-full">
+									<SelectValue placeholder="Choose store" />
+								</SelectTrigger>
+								<SelectContent>
+									{stores.map((s) => (
+										<SelectItem key={s.id} value={s.id.toString()}>
+											{s.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+
+						{/* Times */}
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-1.5">
+								<label className="text-xs font-medium text-muted-foreground">Start</label>
+								<Select value={shiftStart} onValueChange={setShiftStart}>
+									<SelectTrigger className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{SHIFT_TIME_OPTIONS.map((t) => (
+											<SelectItem key={`s-${t}`} value={t}>{t}</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-1.5">
+								<label className="text-xs font-medium text-muted-foreground">End</label>
+								<Select value={shiftEnd} onValueChange={setShiftEnd}>
+									<SelectTrigger className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{SHIFT_TIME_OPTIONS.map((t) => (
+											<SelectItem key={`e-${t}`} value={t}>{t}</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 							</div>
 						</div>
 
-						<div className="space-y-2 pb-4 border-b">
-							<h4 className="text-sm font-semibold">Comment</h4>
-							<p className="text-sm text-muted-foreground">{selectedComment}</p>
-							{/* TODO: Add shift configuration form here */}
-						</div>
-
-						<div className="space-y-2">
-							<div className="flex items-center gap-2">
-								<h4 className="text-sm font-semibold">Add Shift</h4>
-								<span
-									className={cn(
-										"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
-										dialogDayAvailability === "not_available"
-											? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"
-											: "border-border bg-muted text-muted-foreground",
-									)}
-								>
-									<span className={cn("h-1.5 w-1.5 rounded-full", dialogAvailabilityStyle.dot)} />
-									{dialogAvailabilityStyle.label}
+						{/* Break checkbox */}
+						<label className="flex items-center gap-2.5 cursor-pointer select-none">
+							<Checkbox
+								checked={hasBreak}
+								onCheckedChange={(v) => setHasBreak(v === true)}
+							/>
+							<span className="text-sm">30 min break</span>
+							{shiftHours(shiftStart, shiftEnd) >= 6 && !hasBreak && (
+								<span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+									(≥ 6h — break recommended)
 								</span>
-							</div>
-
-							{isSelectedDayUnavailable ? (
-								<div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-									This user is not available on this day, so no shift can be assigned.
-								</div>
-							) : (
-								<>
-									<div className="space-y-1">
-										<label
-											htmlFor="shift-store"
-											className="text-xs font-medium text-muted-foreground"
-										>
-											Store
-										</label>
-										<Select
-											value={selectedStoreId.toString()}
-											onValueChange={(val) => setSelectedStoreId(Number(val))}
-										>
-											<SelectTrigger id="shift-store" className="w-full">
-												<SelectValue placeholder="Choose store" />
-											</SelectTrigger>
-											<SelectContent>
-												{stores.map((store) => (
-													<SelectItem key={store.id} value={store.id.toString()}>
-														{store.name}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-									{/* <p className="text-sm text-muted-foreground">
-                  Configure shift details for {selectedDay ? format(selectedDay, "EEEE") : ""}.
-                </p> */}
-									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-										<div className="space-y-1">
-											<label className="text-xs font-medium text-muted-foreground">
-												Start hour
-											</label>
-											<Select value={shiftStart} onValueChange={setShiftStart}>
-												<SelectTrigger className="w-full">
-													<SelectValue placeholder="Quick pick" />
-												</SelectTrigger>
-												<SelectContent>
-													{SHIFT_TIME_OPTIONS.map((time) => (
-														<SelectItem key={`start-${time}`} value={time}>
-															{time}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</div>
-										<div className="space-y-1">
-											<label className="text-xs font-medium text-muted-foreground">End hour</label>
-											<Select value={shiftEnd} onValueChange={setShiftEnd}>
-												<SelectTrigger className="w-full">
-													<SelectValue placeholder="Quick pick" />
-												</SelectTrigger>
-												<SelectContent>
-													{SHIFT_TIME_OPTIONS.map((time) => (
-														<SelectItem key={`end-${time}`} value={time}>
-															{time}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</div>
-									</div>
-									{effectiveIsInvalid ? (
-										<p className="text-xs text-red-600 dark:text-red-400">
-											End hour must be later than start hour.
-										</p>
-									) : null}
-									{customShiftStart && !validateTimeFormat(customShiftStart) ? (
-										<p className="text-xs text-red-600 dark:text-red-400">
-											Start time must be in HH:MM format.
-										</p>
-									) : null}
-									{customShiftEnd && !validateTimeFormat(customShiftEnd) ? (
-										<p className="text-xs text-red-600 dark:text-red-400">
-											End time must be in HH:MM format.
-										</p>
-									) : null}
-									{selectedStoreId === 0 ? (
-										<p className="text-xs text-red-600 dark:text-red-400">Please choose a store.</p>
-									) : null}
-									{/* {selectedStoreName ? (
-                  <p className="text-xs text-muted-foreground">Selected store: {selectedStoreName}</p>
-                ) : null} */}
-									{/* <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                      {currentWeek != "null" ? currentWeek : "Choose week"}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>Select Week</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup value={currentWeek} onValueChange={setCurrentWeek}>
-                        {weeks.map((week) => (
-                          <DropdownMenuRadioItem key={week.id} value={week.week_label}>
-                            {week.week_label}
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu> */}
-								</>
 							)}
-						</div>
+						</label>
+
+						{isInvalid ? (
+							<p className="text-xs text-destructive">End time must be after start time.</p>
+						) : shiftStart && shiftEnd ? (
+							(() => {
+								const gross = shiftHours(shiftStart, shiftEnd);
+								const net = gross - (hasBreak ? 0.5 : 0);
+								return (
+									<p className="text-xs text-muted-foreground">
+										<span className="font-semibold text-foreground">{fmt(net)}</span>
+										{" worked"}
+										{hasBreak && (
+											<span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>
+										)}
+									</p>
+								);
+							})()
+						) : null}
 					</div>
 
-					<div className="flex gap-2 justify-end">
-						<Button variant="outline" onClick={() => setDialogOpen(false)}>
+					<DialogFooter className="gap-2">
+						{existingShift && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={handleRemoveShift}
+								className="text-destructive hover:text-destructive mr-auto"
+							>
+								<X className="h-3.5 w-3.5 mr-1" />
+								Remove
+							</Button>
+						)}
+						<Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
 							Cancel
 						</Button>
 						<Button
+							size="sm"
 							onClick={handleSaveShift}
-							disabled={isSelectedDayUnavailable || effectiveIsInvalid || selectedStoreId === 0}
+							disabled={isInvalid || !selectedStoreId}
 						>
-							Save Shift
+							{existingShift ? "Update shift" : "Assign shift"}
 						</Button>
-					</div>
+					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 
-			<Dialog open={clearDialog} onOpenChange={setClearDialog}>
-				<DialogContent>
+			{/* ── Clear confirmation dialog ─────────────────────────────────── */}
+			<Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+				<DialogContent className="max-w-sm">
 					<DialogHeader>
 						<DialogTitle>Clear all shifts?</DialogTitle>
 						<DialogDescription>
-							This will delete all assigned shifts. This action cannot be undone.
+							This will permanently delete all{" "}
+							<strong>{weekShifts.length} shift{weekShifts.length !== 1 ? "s" : ""}</strong> for{" "}
+							<strong>{currentWeek}</strong>. This cannot be undone.
 						</DialogDescription>
 					</DialogHeader>
-					<div className="flex gap-2 justify-end">
-						<Button variant="outline" onClick={() => setClearDialog(false)}>
+					<DialogFooter>
+						<Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button variant="destructive" onClick={handleConfirmClear}>
-							Clear All
+						<Button variant="destructive" size="sm" onClick={handleConfirmClear} disabled={isClearing}>
+							{isClearing ? "Clearing…" : "Clear all"}
 						</Button>
-					</div>
+					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 		</div>

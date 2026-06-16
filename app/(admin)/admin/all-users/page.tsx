@@ -3,6 +3,7 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
@@ -30,6 +31,7 @@ import {
 	XCircle,
 	MoreHorizontal,
 	Pencil,
+	UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RoleName, User } from "@/types";
@@ -38,6 +40,7 @@ import {
 	updateUserPermissions,
 	updateUserStatus,
 	changeNickname,
+	createEmployee,
 } from "@/action/supabase";
 import UserSkeleton from "@/components/user-skeleton";
 
@@ -52,7 +55,6 @@ function getOptions(
 		SetStateAction<{
 			user: User;
 			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
-			// | "changeNickname";
 		} | null>
 	>,
 	menuType: MenuAction,
@@ -71,10 +73,6 @@ function getOptions(
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-[180px]">
-				{/* <DropdownMenuItem onClick={() => setConfirmAction({ user, action: "changeNickname" })}>
-					<FolderPen className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-					<span>Change Nickname</span>
-				</DropdownMenuItem> */}
 				{menuType === "admin" ? (
 					<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "removeAdmin" })}>
 						<UserX className="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
@@ -121,13 +119,14 @@ function getOptions(
 function makeUser(
 	user: User,
 	updatingUser: string | null,
+	menuType: MenuAction,
 	setConfirmAction: Dispatch<
 		SetStateAction<{
 			user: User;
 			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
-			// | "changeNickname";
 		} | null>
 	>,
+	setEditingUser: Dispatch<SetStateAction<{ user: User; nickname: string } | null>>,
 ) {
 	return (
 		<div
@@ -142,25 +141,21 @@ function makeUser(
 					</AvatarFallback>
 				</Avatar>
 				<div className="min-w-0 flex-1">
-					{/* <div className="flex items-center gap-2">
-						<p className="font-medium text-sm sm:text-base truncate">{user.first_name}</p>
-					</div> */}
 					<button
 						type="button"
-						// onClick={() => setEditingUser(user)}
+						onClick={() => setEditingUser({ user, nickname: user.nickname || user.first_name })}
 						className="group flex items-center gap-1 text-left"
 					>
 						<p className="font-medium text-sm sm:text-base truncate transition-colors">
-							{user.first_name}
+							{user.nickname || user.first_name}
 						</p>
 						<Pencil className="h-3 w-3 opacity-0 transition-all duration-150 group-hover:opacity-100" />
-						{/* <Pencil className="h-3 w-3 opacity-100 transition-opacity text-muted-foreground" /> */}
 					</button>
 					<p className="text-xs sm:text-sm text-muted-foreground truncate">{user.email}</p>
 				</div>
 			</div>
 			<div className="flex items-center gap-2 shrink-0">
-				{getOptions(user, updatingUser, setConfirmAction, "admin")}
+				{getOptions(user, updatingUser, setConfirmAction, menuType)}
 			</div>
 		</div>
 	);
@@ -170,11 +165,23 @@ export default function AllUsersPage() {
 	const [users, setUsers] = useState<User[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+	const [editingUser, setEditingUser] = useState<{ user: User; nickname: string } | null>(null);
+	const [addingEmployee, setAddingEmployee] = useState(false);
+	const [newEmployeeNames, setNewEmployeeNames] = useState<string[]>([""]);
+
+	const handleNameChange = (i: number, value: string) => {
+		setNewEmployeeNames((prev) => {
+			const next = [...prev];
+			next[i] = value;
+			const firstEmpty = next.findIndex((n) => !n.trim());
+			if (firstEmpty === -1) return [...next, ""];
+			return next.slice(0, firstEmpty + 1);
+		});
+	};
 
 	const [confirmAction, setConfirmAction] = useState<{
 		user: User;
 		action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
-		// | "changeNickname";
 	} | null>(null);
 
 	const fetchUsers = async () => {
@@ -225,6 +232,52 @@ export default function AllUsersPage() {
 		}
 	};
 
+	const handleSaveNickname = async () => {
+		if (!editingUser) return;
+		const { user, nickname } = editingUser;
+		setEditingUser(null);
+		setUpdatingUser(user.email);
+		try {
+			const result = await changeNickname(user.email, nickname.trim());
+			if (result) {
+				toast.success("Username updated successfully");
+				await fetchUsers();
+			} else {
+				toast.error("Failed to update username");
+			}
+		} catch (error) {
+			console.error("Error updating nickname:", error);
+			toast.error("Failed to update username");
+		} finally {
+			setUpdatingUser(null);
+		}
+	};
+
+	const handleCreateEmployee = async () => {
+		const names = newEmployeeNames.map((n) => n.trim()).filter(Boolean);
+		if (!names.length) return;
+		setAddingEmployee(false);
+		setNewEmployeeNames([""]);
+		setUpdatingUser("__creating__");
+		try {
+			const results = await Promise.all(names.map((name) => createEmployee(name)));
+			const succeeded = results.filter(Boolean).length;
+			if (succeeded === names.length) {
+				toast.success(
+					names.length === 1 ? `Employee "${names[0]}" added` : `${names.length} employees added`,
+				);
+			} else {
+				toast.error("Some employees could not be added");
+			}
+			await fetchUsers();
+		} catch (error) {
+			console.error("Error creating employees:", error);
+			toast.error("Failed to add employees");
+		} finally {
+			setUpdatingUser(null);
+		}
+	};
+
 	const handleConfirmAction = async () => {
 		if (!confirmAction) return;
 
@@ -235,10 +288,6 @@ export default function AllUsersPage() {
 			case "accept":
 				await handleUpdateUserStatus(user.email, true);
 				break;
-			// case "acceptAsFix":
-			// 	await handleUpdateUserStatus(user.email, true);
-			// 	await handleUpdateUserPermissions(user.email, "fix");
-			// 	break;
 			case "reject":
 				await handleUpdateUserStatus(user.email, false);
 				break;
@@ -254,9 +303,6 @@ export default function AllUsersPage() {
 			case "removeFix":
 				await handleUpdateUserPermissions(user.email, "student");
 				break;
-			// case "changeNickname":
-			// 	// await changeNickname(user.email);
-			// 	break;
 		}
 	};
 
@@ -446,7 +492,7 @@ export default function AllUsersPage() {
 						{adminUsers.length === 0 ? (
 							<p className="text-sm text-muted-foreground">No administrators found</p>
 						) : (
-							adminUsers.map((user) => makeUser(user, updatingUser, setConfirmAction))
+							adminUsers.map((user) => makeUser(user, updatingUser, "admin", setConfirmAction, setEditingUser))
 						)}
 					</CardContent>
 				</Card>
@@ -454,44 +500,30 @@ export default function AllUsersPage() {
 				{/* Fix Users */}
 				<Card>
 					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-							Employees ({fixUsers.length})
-						</CardTitle>
+						<div className="flex items-center justify-between">
+							<CardTitle className="flex items-center gap-2">
+								<Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+								Employees ({fixUsers.length})
+							</CardTitle>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-8 w-8 p-0"
+								onClick={() => setAddingEmployee(true)}
+							>
+								<UserPlus className="h-4 w-4" />
+								<span className="sr-only">Add employee</span>
+							</Button>
+						</div>
 						<CardDescription>Employees with schedule fix privileges</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
 						{fixUsers.length === 0 ? (
 							<p className="text-sm text-muted-foreground">No fixers found</p>
 						) : (
-							fixUsers.map((user) => (
-								<div
-									key={user.email}
-									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
-								>
-									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
-											<AvatarImage
-												src={user.image}
-												alt={user.first_name}
-												referrerPolicy="no-referrer"
-											/>
-											<AvatarFallback className="text-xs sm:text-sm">
-												{getInitials(user.first_name)}
-											</AvatarFallback>
-										</Avatar>
-										<div className="min-w-0 flex-1">
-											<p className="font-medium text-sm sm:text-base truncate">{user.first_name}</p>
-											<p className="text-xs sm:text-sm text-muted-foreground truncate">
-												{user.email}
-											</p>
-										</div>
-									</div>
-									<div className="flex items-center gap-2 shrink-0">
-										{getOptions(user, updatingUser, setConfirmAction, "fix")}
-									</div>
-								</div>
-							))
+							fixUsers.map((user) =>
+								makeUser(user, updatingUser, "fix", setConfirmAction, setEditingUser),
+							)
 						)}
 					</CardContent>
 				</Card>
@@ -509,38 +541,83 @@ export default function AllUsersPage() {
 						{regularUsers.length === 0 ? (
 							<p className="text-sm text-muted-foreground">No regular users found</p>
 						) : (
-							regularUsers.map((user) => (
-								<div
-									key={user.email}
-									className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg border p-3 sm:p-4"
-								>
-									<div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-										<Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
-											<AvatarImage
-												src={user.image}
-												alt={user.first_name}
-												referrerPolicy="no-referrer"
-											/>
-											<AvatarFallback className="text-xs sm:text-sm">
-												{getInitials(user.first_name)}
-											</AvatarFallback>
-										</Avatar>
-										<div className="min-w-0 flex-1">
-											<p className="font-medium text-sm sm:text-base truncate">{user.first_name}</p>
-											<p className="text-xs sm:text-sm text-muted-foreground truncate">
-												{user.email}
-											</p>
-										</div>
-									</div>
-									<div className="flex items-center gap-2 shrink-0">
-										{getOptions(user, updatingUser, setConfirmAction, "student")}
-									</div>
-								</div>
-							))
+							regularUsers.map((user) =>
+								makeUser(user, updatingUser, "student", setConfirmAction, setEditingUser),
+							)
 						)}
 					</CardContent>
 				</Card>
 			</div>
+
+			{/* Add Employee Dialog */}
+			<Dialog
+				open={addingEmployee}
+				onOpenChange={(open) => {
+					setAddingEmployee(open);
+					if (!open) setNewEmployeeNames([""]);
+				}}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Add Employees</DialogTitle>
+						<DialogDescription>
+							Create dummy employee accounts for planning purposes.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="flex flex-col gap-2">
+						{newEmployeeNames.map((name, i) => (
+							<Input
+								key={i}
+								value={name}
+								onChange={(e) => handleNameChange(i, e.target.value)}
+								onKeyDown={(e) => e.key === "Enter" && handleCreateEmployee()}
+								placeholder="Employee name"
+								autoFocus={i === 0}
+								className="animate-in fade-in-0 slide-in-from-top-2 duration-200"
+							/>
+						))}
+					</div>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setAddingEmployee(false)}>
+							Cancel
+						</Button>
+						<Button
+							onClick={handleCreateEmployee}
+							disabled={!newEmployeeNames.some((n) => n.trim())}
+						>
+							Add
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Edit Username Dialog */}
+			<Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Change Username</DialogTitle>
+						<DialogDescription>
+							Set a display name for <strong>{editingUser?.user.first_name}</strong>.
+						</DialogDescription>
+					</DialogHeader>
+					<Input
+						value={editingUser?.nickname ?? ""}
+						onChange={(e) =>
+							setEditingUser((prev) => prev && { ...prev, nickname: e.target.value })
+						}
+						onKeyDown={(e) => e.key === "Enter" && handleSaveNickname()}
+						placeholder="Enter username"
+					/>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setEditingUser(null)}>
+							Cancel
+						</Button>
+						<Button onClick={handleSaveNickname} disabled={!editingUser?.nickname.trim()}>
+							Save
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 			{/* Confirmation Dialog */}
 			<Dialog open={!!confirmAction} onOpenChange={() => setConfirmAction(null)}>

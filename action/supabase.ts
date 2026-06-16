@@ -114,16 +114,18 @@ async function getAllowData(user: User) {
 async function getAllUsers() {
 	const { data, error } = await supabaseAdmin
 		.from("User")
-		.select("email, first_name, image, allowed, role_name");
+		.select("email, first_name, nickname, image, allowed, role_name");
 
 	if (error) {
 		console.error("Error fetching users:", error);
 		return [];
 	}
+	// console.log("Fetched users:", data);
 
 	return data.map((user) => ({
 		email: user.email,
 		first_name: user.first_name,
+		nickname: user.nickname,
 		image: user.image,
 		allowed: user.allowed,
 		role: user.role_name,
@@ -476,6 +478,23 @@ async function getCsvAvailabilities(availabilityData: Availability[]) {
 	return csvContent;
 }
 
+async function createEmployee(name: string) {
+	const slug = name.trim().toLowerCase().replace(/\s+/g, ".");
+	const email = `${slug}.${Date.now()}@employee.local`;
+
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.insert({ first_name: name.trim(), email, image: "", allowed: true, role_name: "fix" })
+		.select();
+
+	if (error) {
+		console.error("Error creating employee:", error);
+		return null;
+	}
+
+	return data as User[];
+}
+
 async function changeNickname(email: string, newNickname: string) {
 	const { data, error } = await supabaseAdmin
 		.from("User")
@@ -515,4 +534,5 @@ export {
 	getAllShifts,
 	clearShifts,
 	changeNickname,
+	createEmployee,
 };
