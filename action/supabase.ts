@@ -114,7 +114,7 @@ async function getAllowData(user: User) {
 async function getAllUsers() {
 	const { data, error } = await supabaseAdmin
 		.from("User")
-		.select("email, first_name, nickname, image, allowed, role_name");
+		.select("email, first_name, nickname, image, allowed, role_name, store_id");
 
 	if (error) {
 		console.error("Error fetching users:", error);
@@ -129,6 +129,7 @@ async function getAllUsers() {
 		image: user.image,
 		allowed: user.allowed,
 		role: user.role_name,
+		store_id: user.store_id ?? null,
 	})) as User[];
 }
 
@@ -413,6 +414,30 @@ async function getAllStoresFromRegion(region: string) {
 	return data as Store[];
 }
 
+async function getStoresForApp() {
+	const region = process.env.APP_REGION;
+	if (!region) {
+		console.error("APP_REGION env var is not set");
+		return [];
+	}
+	return getAllStoresFromRegion(region);
+}
+
+async function assignUserStore(email: string, storeId: number | null) {
+	const { data, error } = await supabaseAdmin
+		.from("User")
+		.update({ store_id: storeId })
+		.eq("email", email)
+		.select();
+
+	if (error) {
+		console.error("Error assigning store to user:", error);
+		return null;
+	}
+
+	return data as User[];
+}
+
 async function getAllAvailability() {
 	const { data, error } = await supabaseAdmin
 		.from("Availability")
@@ -535,4 +560,6 @@ export {
 	clearShifts,
 	changeNickname,
 	createEmployee,
+	getStoresForApp,
+	assignUserStore,
 };

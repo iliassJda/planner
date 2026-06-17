@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -75,16 +76,16 @@ const NAMED_STORE_COLORS: Array<StoreColor & { keywords: string[] }> = [
 	{ keywords: ["galerie"], bg: "#fecdd3", text: "#881337", sub: "#be123c" }, // pink
 	{ keywords: ["beurre"], bg: "#ddd6fe", text: "#3b0764", sub: "#5b21b6" }, // violet/purple
 	{ keywords: ["grand", "place"], bg: "#bbf7d0", text: "#14532d", sub: "#166534" }, // green
-	{ keywords: ["atelier"], bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
-	{ keywords: ["mad", "madeleine"], bg: "#fed7aa", text: "#7c2d12", sub: "#9a3412" }, // orange
+	{ keywords: ["atelier"], bg: "#fed7aa", text: "#7c2d12", sub: "#9a3412" }, // orange
+	{ keywords: ["mad", "madeleine"], bg: "#bfdbfe", text: "#1e3a8a", sub: "#1d4ed8" }, // blue
 	{ keywords: ["louise"], bg: "#bae6fd", text: "#0c4a6e", sub: "#075985" }, // sky
 ];
 
 const FALLBACK_STORE_COLORS: StoreColor[] = [
-	{ bg: "#99f6e4", text: "#042f2e", sub: "#134e4a" }, // teal
-	{ bg: "#fda4af", text: "#4c0519", sub: "#9f1239" }, // rose
-	{ bg: "#a5b4fc", text: "#1e1b4b", sub: "#312e81" }, // indigo
-	{ bg: "#d9f99d", text: "#1a2e05", sub: "#3f6212" }, // lime
+	{ bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
+	{ bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
+	{ bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
+	{ bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
 ];
 
 type EmployeeRow = {
@@ -115,6 +116,9 @@ export default function WeeklyPlanner() {
 	const [shiftEnd, setShiftEnd] = useState("17:00");
 	const [hasBreak, setHasBreak] = useState(false);
 
+	const [otherStoreName, setOtherStoreName] = useState("");
+	const [customStoreNames, setCustomStoreNames] = useState<Record<string, string>>({});
+
 	// Clear dialog
 	const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
@@ -129,6 +133,8 @@ export default function WeeklyPlanner() {
 		const idx = stores.findIndex((s) => s.id === storeId);
 		return FALLBACK_STORE_COLORS[idx % FALLBACK_STORE_COLORS.length];
 	};
+
+	const otherStore = stores.find((s) => s.name.toLowerCase().includes("other")) ?? null;
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -184,11 +190,27 @@ export default function WeeklyPlanner() {
 
 	const weekAvails = weekObj ? availabilityData.filter((a) => a.week_id === weekObj.id) : [];
 
+	// Ordered store keywords for grouping fix employees
+	const STORE_GROUP_ORDER = ["beurre", "grand", "mad", "atelier", "galerie"];
+	const storeGroupPriority = (storeId: number | null | undefined): number => {
+		if (!storeId) return STORE_GROUP_ORDER.length;
+		const store = stores.find((s) => s.id === storeId);
+		if (!store) return STORE_GROUP_ORDER.length;
+		const name = store.name.toLowerCase();
+		const idx = STORE_GROUP_ORDER.findIndex((kw) => name.includes(kw));
+		return idx === -1 ? STORE_GROUP_ORDER.length : idx;
+	};
+
 	const employeeRows: EmployeeRow[] = [
-		// Fix employees first (no availability, always shown)
+		// Fix employees grouped by store in defined order, then alphabetically within group
 		...users
 			.filter((u) => u.role === "fix")
-			.sort((a, b) => (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name))
+			.sort((a, b) => {
+				const pa = storeGroupPriority(a.store_id);
+				const pb = storeGroupPriority(b.store_id);
+				if (pa !== pb) return pa - pb;
+				return (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name);
+			})
 			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null })),
 
 		// Students with availability for this week
@@ -246,7 +268,7 @@ export default function WeeklyPlanner() {
 		);
 		const start = existing?.start_time ?? "09:00";
 		const end = existing?.end_time ?? "17:00";
-		setSelectedStoreId(existing?.store_id ?? stores[0]?.id ?? 0);
+		setSelectedStoreId(existing?.store_id ?? row.user.store_id ?? stores[0]?.id ?? 0);
 		setShiftStart(start);
 		setShiftEnd(end);
 		// Detect break from stored net hours vs gross hours, or auto-apply rule for new shifts
@@ -255,6 +277,12 @@ export default function WeeklyPlanner() {
 			setHasBreak(Math.abs(gross - existing.hours - 0.5) < 0.01);
 		} else {
 			setHasBreak(shiftHours(start, end) >= 6);
+		}
+		const customKey = `${row.user.email}|${dayKey}`;
+		if (otherStore && existing?.store_id === otherStore.id) {
+			setOtherStoreName(customStoreNames[customKey] ?? "");
+		} else {
+			setOtherStoreName("");
 		}
 		setSelectedRow(row);
 		setSelectedDay(day);
@@ -266,6 +294,9 @@ export default function WeeklyPlanner() {
 		const email = selectedRow.user.email;
 		const dayKey = format(selectedDay, "yyyy-MM-dd");
 		const hours = shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0);
+		if (otherStore && selectedStoreId === otherStore.id) {
+			setCustomStoreNames((prev) => ({ ...prev, [`${email}|${dayKey}`]: otherStoreName.trim() }));
+		}
 
 		setAssignedShifts((prev) => {
 			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
@@ -512,11 +543,10 @@ export default function WeeklyPlanner() {
 												<div className="flex flex-col items-center gap-1">
 													{colorMode && color && (
 														<span
-															className="h-2 w-2 rounded-full block"
+															className="h-3.5 w-3.5 rounded-full block flex-shrink-0"
 															style={{
 																backgroundColor: color.bg,
-																outline: `2px solid ${color.text}`,
-																outlineOffset: "-2px",
+																border: `2px solid ${color.text}`,
 															}}
 														/>
 													)}
@@ -666,7 +696,10 @@ export default function WeeklyPlanner() {
 																				className="text-[9px] font-semibold leading-none truncate max-w-[90px] px-0.5 text-primary/70"
 																				style={shiftColor ? { color: shiftColor.sub } : undefined}
 																			>
-																				{shiftStore.name}
+																				{otherStore && shift.store_id === otherStore.id
+																					? customStoreNames[`${entry.user.email}|${dayKey}`] ||
+																						shiftStore.name
+																					: shiftStore.name}
 																			</span>
 																		)}
 																	</div>
@@ -829,7 +862,10 @@ export default function WeeklyPlanner() {
 								onValueChange={(v) => setSelectedStoreId(Number(v))}
 							>
 								<SelectTrigger className="w-full">
-									<SelectValue placeholder="Choose store" />
+									<SelectValue
+										placeholder="Choose store"
+										// value={selectedRow?.user.store_id?.toString()}
+									/>
 								</SelectTrigger>
 								<SelectContent>
 									{stores.map((s) => (
@@ -839,6 +875,16 @@ export default function WeeklyPlanner() {
 									))}
 								</SelectContent>
 							</Select>
+							{otherStore && selectedStoreId === otherStore.id && (
+								<div className="animate-in fade-in-0 slide-in-from-top-2 duration-200">
+									<Input
+										placeholder="Which store? (optional)"
+										value={otherStoreName}
+										onChange={(e) => setOtherStoreName(e.target.value)}
+										autoFocus
+									/>
+								</div>
+							)}
 						</div>
 
 						{/* Times */}

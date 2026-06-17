@@ -32,15 +32,25 @@ import {
 	MoreHorizontal,
 	Pencil,
 	UserPlus,
+	Store,
 } from "lucide-react";
 import { toast } from "sonner";
-import { RoleName, User } from "@/types";
+import { RoleName, Store as StoreType, User } from "@/types";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import {
 	getAllUsers,
 	updateUserPermissions,
 	updateUserStatus,
 	changeNickname,
 	createEmployee,
+	getStoresForApp,
+	assignUserStore,
 } from "@/action/supabase";
 import UserSkeleton from "@/components/user-skeleton";
 
@@ -54,10 +64,17 @@ function getOptions(
 	setConfirmAction: Dispatch<
 		SetStateAction<{
 			user: User;
-			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+			action:
+				| "accept"
+				| "reject"
+				| "makeAdmin"
+				| "removeAdmin"
+				| "makeFix"
+				| "removeFix";
 		} | null>
 	>,
 	menuType: MenuAction,
+	setAssigningStore: Dispatch<SetStateAction<{ user: User; storeId: string } | null>>,
 ) {
 	return (
 		<DropdownMenu>
@@ -80,6 +97,11 @@ function getOptions(
 					</DropdownMenuItem>
 				) : menuType === "fix" ? (
 					<>
+						<DropdownMenuItem onClick={() => setAssigningStore({ user, storeId: "" })}>
+							<Store className="mr-2 h-4 w-4 text-green-600 dark:text-green-400" />
+							<span>Assign Store</span>
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
 							<Crown className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
 							<span>Make Admin</span>
@@ -96,10 +118,10 @@ function getOptions(
 					</>
 				) : (
 					<>
-						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
+						{/* <DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
 							<ShieldCheck className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-400" />
 							<span>Make Admin</span>
-						</DropdownMenuItem>
+						</DropdownMenuItem> */}
 						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeFix" })}>
 							<Shield className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" />
 							<span>Make Fix</span>
@@ -123,11 +145,24 @@ function makeUser(
 	setConfirmAction: Dispatch<
 		SetStateAction<{
 			user: User;
-			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
+			action:
+				| "accept"
+				| "reject"
+				| "makeAdmin"
+				| "removeAdmin"
+				| "makeFix"
+				| "removeFix";
 		} | null>
 	>,
 	setEditingUser: Dispatch<SetStateAction<{ user: User; nickname: string } | null>>,
+	setAssigningStore: Dispatch<SetStateAction<{ user: User; storeId: string } | null>>,
+	stores: StoreType[],
 ) {
+	const assignedStore =
+		menuType === "fix" && user.store_id != null
+			? stores.find((s) => s.id === user.store_id)
+			: undefined;
+
 	return (
 		<div
 			key={user.email}
@@ -152,10 +187,16 @@ function makeUser(
 						<Pencil className="h-3 w-3 opacity-0 transition-all duration-150 group-hover:opacity-100" />
 					</button>
 					<p className="text-xs sm:text-sm text-muted-foreground truncate">{user.email}</p>
+					{assignedStore && (
+						<span className="inline-flex items-center gap-1 mt-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+							<Store className="h-3 w-3" />
+							{assignedStore.name}
+						</span>
+					)}
 				</div>
 			</div>
 			<div className="flex items-center gap-2 shrink-0">
-				{getOptions(user, updatingUser, setConfirmAction, menuType)}
+				{getOptions(user, updatingUser, setConfirmAction, menuType, setAssigningStore)}
 			</div>
 		</div>
 	);
@@ -184,6 +225,11 @@ export default function AllUsersPage() {
 		action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
 	} | null>(null);
 
+	const [assigningStore, setAssigningStore] = useState<{ user: User; storeId: string } | null>(
+		null,
+	);
+	const [stores, setStores] = useState<StoreType[]>([]);
+
 	const fetchUsers = async () => {
 		const userData = await getAllUsers();
 		setUsers(userData.sort((a, b) => a.first_name.localeCompare(b.first_name)));
@@ -192,6 +238,7 @@ export default function AllUsersPage() {
 
 	useEffect(() => {
 		fetchUsers();
+		getStoresForApp().then(setStores);
 	}, []);
 
 	const handleUpdateUserStatus = async (email: string, allowed: boolean) => {
@@ -303,6 +350,27 @@ export default function AllUsersPage() {
 			case "removeFix":
 				await handleUpdateUserPermissions(user.email, "student");
 				break;
+		}
+	};
+
+	const handleAssignStore = async () => {
+		if (!assigningStore) return;
+		const { user, storeId } = assigningStore;
+		setAssigningStore(null);
+		setUpdatingUser(user.email);
+		try {
+			const result = await assignUserStore(user.email, storeId ? Number(storeId) : null);
+			if (result) {
+				toast.success(`Store assigned to ${user.nickname || user.first_name}`);
+				await fetchUsers();
+			} else {
+				toast.error("Failed to assign store");
+			}
+		} catch (error) {
+			console.error("Error assigning store:", error);
+			toast.error("Failed to assign store");
+		} finally {
+			setUpdatingUser(null);
 		}
 	};
 
@@ -492,7 +560,9 @@ export default function AllUsersPage() {
 						{adminUsers.length === 0 ? (
 							<p className="text-sm text-muted-foreground">No administrators found</p>
 						) : (
-							adminUsers.map((user) => makeUser(user, updatingUser, "admin", setConfirmAction, setEditingUser))
+							adminUsers.map((user) =>
+								makeUser(user, updatingUser, "admin", setConfirmAction, setEditingUser, setAssigningStore, stores),
+							)
 						)}
 					</CardContent>
 				</Card>
@@ -522,7 +592,7 @@ export default function AllUsersPage() {
 							<p className="text-sm text-muted-foreground">No fixers found</p>
 						) : (
 							fixUsers.map((user) =>
-								makeUser(user, updatingUser, "fix", setConfirmAction, setEditingUser),
+								makeUser(user, updatingUser, "fix", setConfirmAction, setEditingUser, setAssigningStore, stores),
 							)
 						)}
 					</CardContent>
@@ -542,7 +612,7 @@ export default function AllUsersPage() {
 							<p className="text-sm text-muted-foreground">No regular users found</p>
 						) : (
 							regularUsers.map((user) =>
-								makeUser(user, updatingUser, "student", setConfirmAction, setEditingUser),
+								makeUser(user, updatingUser, "student", setConfirmAction, setEditingUser, setAssigningStore, stores),
 							)
 						)}
 					</CardContent>
@@ -654,6 +724,44 @@ export default function AllUsersPage() {
 						>
 							{updatingUser ? "Processing..." : "Confirm as Employee"}
 						</Button> */}
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Assign Store Dialog */}
+			<Dialog open={!!assigningStore} onOpenChange={() => setAssigningStore(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Assign Store</DialogTitle>
+						<DialogDescription>
+							Select the store for{" "}
+							<strong>{assigningStore?.user.nickname || assigningStore?.user.first_name}</strong>.
+						</DialogDescription>
+					</DialogHeader>
+					<Select
+						value={assigningStore?.storeId ?? ""}
+						onValueChange={(value) =>
+							setAssigningStore((prev) => prev && { ...prev, storeId: value })
+						}
+					>
+						<SelectTrigger>
+							<SelectValue placeholder="Select a store" />
+						</SelectTrigger>
+						<SelectContent>
+							{stores.map((store) => (
+								<SelectItem key={store.id} value={String(store.id)}>
+									{store.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setAssigningStore(null)}>
+							Cancel
+						</Button>
+						<Button onClick={handleAssignStore} disabled={!assigningStore?.storeId || !!updatingUser}>
+							{updatingUser ? "Processing..." : "Assign"}
+						</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

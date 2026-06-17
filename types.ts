@@ -7,6 +7,7 @@ type User = {
 	role: RoleName;
 	region: Region;
 	allowed?: boolean;
+	store_id?: number | null;
 };
 
 type RoleName = "admin" | "student" | "fix";
