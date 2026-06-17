@@ -43,7 +43,7 @@ export default function MakerWrapper() {
 
 				{fromScratch && (
 					<div className="w-full">
-						<WeeklyPlanner file={null} />
+						<WeeklyPlanner />
 					</div>
 				)}
 				{uploadedFile && <CSVViewer file={uploadedFile} />}
