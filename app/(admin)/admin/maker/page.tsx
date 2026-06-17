@@ -1,13 +1,20 @@
-// import { getAllAvailability, getAllWeeks } from "@/action/supabase";
-// import DropArea from "./drop-area";
-import MakerWrapper from "./maker-wrapper";
 import WeeklyPlanner from "./weekly-planner";
-// import MakerClient from "./maker-client";
+import { auth } from "@/auth";
 
 export default async function MakerPage() {
 	const isDev = process.env.NODE_ENV === "development";
-	// return <MakerWrapper />;
-	if (isDev) {
+	const betaEmails = (process.env.PLANNER_BETA_EMAILS ?? "")
+		.split(",")
+		.map((e) => e.trim().toLowerCase())
+		.filter(Boolean);
+
+	let isBetaUser = false;
+	if (betaEmails.length > 0) {
+		const session = await auth();
+		isBetaUser = betaEmails.includes(session?.user?.email?.toLowerCase() ?? "");
+	}
+
+	if (isDev || isBetaUser) {
 		return <WeeklyPlanner />;
 	}
 	return (
