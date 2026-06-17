@@ -1,8 +1,12 @@
 const userData = {
 	navMain: [
 		{
-			title: "",
-			url: "",
+			title: "Dashboard",
+			url: "/dashboard",
+		},
+		{
+			title: "Planning",
+			url: "/planning",
 		},
 	],
 };

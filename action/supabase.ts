@@ -236,6 +236,8 @@ function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignmen
 				start_time: shift.start,
 				end_time: shift.end,
 				hours: shift.hours,
+				custom_store_name: shift.customStoreName ?? null,
+				absence_type: shift.absenceType ?? null,
 			} as Shift);
 		}
 	}
@@ -247,12 +249,7 @@ async function insertShift(shifts: Record<string, Record<string, ShiftAssignment
 	const result = fromRecordToShifts(shifts);
 	const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
 
-	if (error) {
-		console.error("Error inserting shifts:", error);
-		return [];
-	}
-
-	// console.log("Inserted shifts:", data);
+	if (error) throw new Error(error.message);
 
 	return data;
 }
@@ -260,30 +257,17 @@ async function insertShift(shifts: Record<string, Record<string, ShiftAssignment
 async function getAllShifts() {
 	const { data, error } = await supabaseAdmin.from("shifts").select("*");
 
-	if (error) {
-		console.error("Error getting all shifts: ", error);
-		return [];
-	}
+	if (error) throw new Error(error.message);
 
-	// console.log("This is all the shifts: ", data);
 	return data as Shift[];
 }
 
 async function clearShifts(shifts: Shift[]) {
-	// const { data, error } = await supabaseAdmin.from("shifts").delete(shifts);
-	// const shiftsArray = fromRecordToShifts(shifts);
 	const shiftIds = shifts.map((s) => s.id);
 
-	// console.log("These are the ID: ", shiftIds, " and there are the shifts: ", shifts);
+	const { error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
 
-	const { data, error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
-
-	if (error) {
-		console.error("Error clearing shifts: ", error);
-		return [];
-	}
-
-	return data;
+	if (error) throw new Error(error.message);
 }
 
 async function updateAvailability(availability: Availability) {
@@ -562,4 +546,82 @@ export {
 	createEmployee,
 	getStoresForApp,
 	assignUserStore,
+	getPlanningPageData,
 };
+
+async function getPlanningPageData(weekLabel?: string) {
+	const { getWeekStartDate } = await import("@/help_functions");
+	const { addDays, format } = await import("date-fns");
+
+	// 1. Fetch all weeks for navigation, sorted chronologically
+	const { data: allWeeksData, error: weeksError } = await supabaseAdmin
+		.from("Week")
+		.select("*")
+		.order("year", { ascending: true })
+		.order("week_number", { ascending: true });
+
+	if (weeksError) throw new Error(weeksError.message);
+	const allWeeks: Week[] = (allWeeksData ?? []) as Week[];
+
+	// 2. Find the target week — by label, or fall back to the active week, then latest
+	let week: Week | null = null;
+	if (weekLabel) {
+		week = allWeeks.find((w) => w.week_label === weekLabel) ?? null;
+	}
+	if (!week) {
+		week = allWeeks.find((w) => w.is_active) ?? allWeeks[allWeeks.length - 1] ?? null;
+	}
+	if (!week) return null;
+
+	// 3. Build the 7 date strings for this week
+	const start = getWeekStartDate(week.week_number, week.year);
+	const weekDates = Array.from({ length: 7 }, (_, i) =>
+		format(addDays(start, i), "yyyy-MM-dd"),
+	);
+
+	// 4. Fetch shifts for those dates
+	const { data: shiftsData, error: shiftsError } = await supabaseAdmin
+		.from("shifts")
+		.select("*")
+		.in("shift_date", weekDates);
+
+	if (shiftsError) throw new Error(shiftsError.message);
+	const shifts: Shift[] = (shiftsData ?? []) as Shift[];
+
+	// 5. Fetch users that appear in those shifts
+	const emails = [...new Set(shifts.map((s) => s.email))];
+	const { data: usersData, error: usersError } =
+		emails.length > 0
+			? await supabaseAdmin
+					.from("User")
+					.select("email, first_name, nickname, image, role_name, store_id")
+					.in("email", emails)
+			: { data: [], error: null };
+
+	if (usersError) throw new Error(usersError.message);
+	const users: User[] = (usersData ?? []).map((u) => ({
+		email: u.email,
+		first_name: u.first_name,
+		nickname: u.nickname,
+		image: u.image,
+		allowed: true,
+		role: u.role_name,
+		store_id: u.store_id ?? null,
+	})) as User[];
+
+	// 6. Fetch stores
+	const region = process.env.APP_REGION;
+	const storeQuery = region
+		? supabaseAdmin.from("store").select("*").eq("region", region)
+		: supabaseAdmin.from("store").select("*");
+	const { data: storesData, error: storesError } = await storeQuery;
+	if (storesError) throw new Error(storesError.message);
+	const stores: Store[] = (storesData ?? []) as Store[];
+
+	// 7. Compute prev/next week labels for navigation
+	const currentIdx = allWeeks.findIndex((w) => w.id === week!.id);
+	const prevWeek = currentIdx > 0 ? allWeeks[currentIdx - 1] : null;
+	const nextWeek = currentIdx < allWeeks.length - 1 ? allWeeks[currentIdx + 1] : null;
+
+	return { week, weekDates, shifts, users, stores, prevWeek, nextWeek, allWeeks };
+}

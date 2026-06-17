@@ -21,21 +21,27 @@ type Week = {
 	// created_at: string;
 };
 
+type AbsenceType = "sick" | "vacation" | "recup";
+
 type Shift = {
 	id: number;
-	store_id: number;
+	store_id: number | null;
 	email: string;
 	shift_date: string;
 	start_time: string;
 	end_time: string;
 	hours: number;
+	custom_store_name?: string | null;
+	absence_type?: AbsenceType | null;
 };
 
 type ShiftAssignment = {
-	storeId: number;
+	storeId: number | null;
 	start: string;
 	end: string;
 	hours: number;
+	customStoreName?: string;
+	absenceType?: AbsenceType;
 };
 
 type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";
@@ -77,4 +83,5 @@ export type {
 	Region,
 	ShiftAssignment,
 	Shift,
+	AbsenceType,
 };

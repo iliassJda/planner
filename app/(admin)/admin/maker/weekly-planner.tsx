@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -39,13 +39,14 @@ import {
 	clearShifts,
 } from "@/action/supabase";
 import { addDays, format } from "date-fns";
-import { RefreshCw, Save, Trash2, CalendarPlus, X, ChevronDown, Palette } from "lucide-react";
+import { RefreshCw, Save, Trash2, CalendarPlus, X, ChevronDown, Palette, FileSpreadsheet, Check, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/user-context";
 
-import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift } from "@/types";
+import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift, AbsenceType } from "@/types";
 import { getInitials, AVAILABILITY_STYLES, getWeekStartDate } from "@/help_functions";
+import { exportWeekToExcel } from "@/lib/export-excel";
 
 // 9:00 → 22:00 in 15-min steps
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, i) => {
@@ -88,11 +89,12 @@ const FALLBACK_STORE_COLORS: StoreColor[] = [
 	{ bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
 ];
 
-type EmployeeRow = {
+export type EmployeeRow = {
 	user: User;
 	days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
 	targetHours: number | null;
 };
+
 
 export default function WeeklyPlanner() {
 	const user = useUser();
@@ -115,9 +117,21 @@ export default function WeeklyPlanner() {
 	const [shiftStart, setShiftStart] = useState("09:00");
 	const [shiftEnd, setShiftEnd] = useState("17:00");
 	const [hasBreak, setHasBreak] = useState(false);
+	const [absenceType, setAbsenceType] = useState<AbsenceType | null>(null);
 
 	const [otherStoreName, setOtherStoreName] = useState("");
-	const [customStoreNames, setCustomStoreNames] = useState<Record<string, string>>({});
+	const [isDirty, setIsDirty] = useState(false);
+	const [linkCopied, setLinkCopied] = useState(false);
+
+	const handleCopyLink = () => {
+		const url = currentWeek !== "null"
+			? `${window.location.origin}/planning/${encodeURIComponent(currentWeek)}`
+			: `${window.location.origin}/planning`;
+		navigator.clipboard.writeText(url).then(() => {
+			setLinkCopied(true);
+			setTimeout(() => setLinkCopied(false), 2000);
+		});
+	};
 
 	// Clear dialog
 	const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -248,6 +262,38 @@ export default function WeeklyPlanner() {
 	const totalStoreHours = (storeId: number) =>
 		weekShifts.filter((s) => s.store_id === storeId).reduce((sum, s) => sum + s.hours, 0);
 
+	const fixEmails = new Set(users.filter((u) => u.role === "fix").map((u) => u.email));
+
+	const staffAtStoreOnDay = (storeId: number, dayKey: string) =>
+		new Set(
+			weekShifts
+				.filter((s) => s.store_id === storeId && s.shift_date === dayKey && !s.absence_type)
+				.map((s) => s.email),
+		).size;
+
+	const neuhausHoursAtStore = (storeId: number) =>
+		weekShifts.filter((s) => s.store_id === storeId && fixEmails.has(s.email)).reduce((sum, s) => sum + s.hours, 0);
+
+	const interimHoursAtStore = (storeId: number) =>
+		weekShifts.filter((s) => s.store_id === storeId && !fixEmails.has(s.email)).reduce((sum, s) => sum + s.hours, 0);
+
+	const absentHoursAtStore = (storeId: number) => {
+		let total = 0;
+		for (const row of employeeRows) {
+			if (row.user.role === "fix" || row.targetHours == null) continue;
+			const absent = Math.max(0, row.targetHours - assignedHours(row.user.email));
+			if (absent <= 0) continue;
+			const byStore = new Map<number, number>();
+			weekShifts
+				.filter((s) => s.email === row.user.email && !s.absence_type && s.store_id != null)
+				.forEach((s) => byStore.set(s.store_id!, (byStore.get(s.store_id!) ?? 0) + s.hours));
+			if (byStore.size === 0) continue;
+			const primaryStoreId = [...byStore.entries()].sort((a, b) => b[1] - a[1])[0][0];
+			if (primaryStoreId === storeId) total += absent;
+		}
+		return total;
+	};
+
 	// ── Dialog helpers ─────────────────────────────────────────────────────────
 
 	const selectedDayKey = selectedDay ? format(selectedDay, "yyyy-MM-dd") : null;
@@ -268,19 +314,19 @@ export default function WeeklyPlanner() {
 		);
 		const start = existing?.start_time ?? "09:00";
 		const end = existing?.end_time ?? "17:00";
+		setAbsenceType(existing?.absence_type ?? null);
 		setSelectedStoreId(existing?.store_id ?? row.user.store_id ?? stores[0]?.id ?? 0);
 		setShiftStart(start);
 		setShiftEnd(end);
 		// Detect break from stored net hours vs gross hours, or auto-apply rule for new shifts
-		if (existing) {
+		if (existing && !existing.absence_type) {
 			const gross = shiftHours(existing.start_time, existing.end_time);
 			setHasBreak(Math.abs(gross - existing.hours - 0.5) < 0.01);
 		} else {
 			setHasBreak(shiftHours(start, end) >= 6);
 		}
-		const customKey = `${row.user.email}|${dayKey}`;
 		if (otherStore && existing?.store_id === otherStore.id) {
-			setOtherStoreName(customStoreNames[customKey] ?? "");
+			setOtherStoreName(existing.custom_store_name ?? "");
 		} else {
 			setOtherStoreName("");
 		}
@@ -290,41 +336,41 @@ export default function WeeklyPlanner() {
 	};
 
 	const handleSaveShift = () => {
-		if (!selectedRow || !selectedDay || isInvalid || !selectedStoreId) return;
+		if (!selectedRow || !selectedDay) return;
+		if (!absenceType && (isInvalid || !selectedStoreId)) return;
 		const email = selectedRow.user.email;
 		const dayKey = format(selectedDay, "yyyy-MM-dd");
-		const hours = shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0);
-		if (otherStore && selectedStoreId === otherStore.id) {
-			setCustomStoreNames((prev) => ({ ...prev, [`${email}|${dayKey}`]: otherStoreName.trim() }));
-		}
+
+		const newShiftData = absenceType
+			? {
+					store_id: null,
+					start_time: "",
+					end_time: "",
+					hours: 0,
+					custom_store_name: null,
+					absence_type: absenceType,
+				}
+			: {
+					store_id: selectedStoreId,
+					start_time: shiftStart,
+					end_time: shiftEnd,
+					hours: shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0),
+					custom_store_name:
+						otherStore && selectedStoreId === otherStore.id ? otherStoreName.trim() : null,
+					absence_type: null,
+				};
 
 		setAssignedShifts((prev) => {
 			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
 			if (idx !== -1) {
 				const next = [...prev];
-				next[idx] = {
-					...next[idx],
-					store_id: selectedStoreId,
-					start_time: shiftStart,
-					end_time: shiftEnd,
-					hours,
-				};
+				next[idx] = { ...next[idx], ...newShiftData };
 				return next;
 			}
 			const tempId = Math.min(...prev.map((s) => s.id), 0) - 1;
-			return [
-				...prev,
-				{
-					id: tempId,
-					email,
-					shift_date: dayKey,
-					store_id: selectedStoreId,
-					start_time: shiftStart,
-					end_time: shiftEnd,
-					hours,
-				},
-			];
+			return [...prev, { id: tempId, email, shift_date: dayKey, ...newShiftData }];
 		});
+		setIsDirty(true);
 		setDialogOpen(false);
 	};
 
@@ -333,6 +379,7 @@ export default function WeeklyPlanner() {
 		setAssignedShifts((prev) =>
 			prev.filter((s) => !(s.email === selectedRow.user.email && s.shift_date === selectedDayKey)),
 		);
+		setIsDirty(true);
 		setDialogOpen(false);
 	};
 
@@ -355,12 +402,15 @@ export default function WeeklyPlanner() {
 					start: s.start_time,
 					end: s.end_time,
 					hours: s.hours,
+					customStoreName: s.custom_store_name ?? undefined,
+					absenceType: s.absence_type ?? undefined,
 				};
 			});
 			await insertShift(nested);
 
 			const refreshed = await getAllShifts();
 			setAssignedShifts(refreshed);
+			setIsDirty(false);
 			toast.success(
 				`Schedule saved — ${weekShifts.length} shift${weekShifts.length !== 1 ? "s" : ""}`,
 			);
@@ -382,6 +432,7 @@ export default function WeeklyPlanner() {
 			await clearShifts(weekShifts);
 			const refreshed = await getAllShifts();
 			setAssignedShifts(refreshed);
+			setIsDirty(false);
 			toast.success(`Cleared all shifts for ${currentWeek}`);
 		} catch {
 			toast.error("Could not clear shifts. Please try again.");
@@ -443,6 +494,30 @@ export default function WeeklyPlanner() {
 							{weekShifts.length} shift{weekShifts.length !== 1 ? "s" : ""} planned
 						</span>
 					)}
+					{isDirty && (
+						<span className="text-xs font-medium text-amber-600 dark:text-amber-400 hidden sm:block">
+							Unsaved changes
+						</span>
+					)}
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={handleCopyLink}
+						disabled={currentWeek === "null"}
+						title="Copy shareable link"
+					>
+						{linkCopied ? (
+							<>
+								<Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" />
+								Copied!
+							</>
+						) : (
+							<>
+								<Share2 className="h-3.5 w-3.5 mr-1.5" />
+								Share
+							</>
+						)}
+					</Button>
 					<Button
 						variant={colorMode ? "secondary" : "outline"}
 						size="sm"
@@ -451,6 +526,23 @@ export default function WeeklyPlanner() {
 					>
 						<Palette className="h-3.5 w-3.5 mr-1.5" />
 						Colours
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() =>
+							exportWeekToExcel({
+								currentWeek,
+								weekDays,
+								employeeRows,
+								stores,
+								weekShifts,
+							})
+						}
+						disabled={weekShifts.length === 0 || currentWeek === "null"}
+					>
+						<FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+						Export Excel
 					</Button>
 					<Button
 						variant="outline"
@@ -608,6 +700,7 @@ export default function WeeklyPlanner() {
 													>
 														<div className="flex items-center gap-2">
 															<Avatar className="h-7 w-7 shrink-0 border">
+																<AvatarImage src={entry.user.image || undefined} alt={displayName} />
 																<AvatarFallback className="text-[9px] font-bold bg-primary/5 text-primary">
 																	{getInitials(displayName)}
 																</AvatarFallback>
@@ -651,7 +744,9 @@ export default function WeeklyPlanner() {
 															? stores.find((s) => s.id === shift.store_id)
 															: undefined;
 														const shiftColor =
-															shift && colorMode ? getStoreColor(shift.store_id) : null;
+															shift && !shift.absence_type && colorMode && shift.store_id
+																? getStoreColor(shift.store_id)
+																: null;
 
 														return (
 															<td
@@ -677,7 +772,27 @@ export default function WeeklyPlanner() {
 																	<div className="absolute inset-0 pointer-events-none opacity-[0.07] bg-[repeating-linear-gradient(45deg,#888_0,#888_1px,transparent_0,transparent_50%)] bg-size-[8px_8px]" />
 																)}
 
-																{shift ? (
+																{shift?.absence_type ? (
+																	<div className="relative z-10 flex items-center justify-center h-full px-1">
+																		<span
+																			className={cn(
+																				"text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded",
+																				shift.absence_type === "sick" &&
+																					"bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+																				shift.absence_type === "vacation" &&
+																					"bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+																				shift.absence_type === "recup" &&
+																					"bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+																			)}
+																		>
+																			{shift.absence_type === "sick"
+																				? "Sick"
+																				: shift.absence_type === "vacation"
+																					? "Vacances"
+																					: "Récup"}
+																		</span>
+																	</div>
+																) : shift ? (
 																	<div className="relative z-10 flex flex-col items-center justify-center h-full gap-0.5 px-1">
 																		<span
 																			className="font-mono font-bold text-[11px] leading-none tracking-tight"
@@ -697,8 +812,7 @@ export default function WeeklyPlanner() {
 																				style={shiftColor ? { color: shiftColor.sub } : undefined}
 																			>
 																				{otherStore && shift.store_id === otherStore.id
-																					? customStoreNames[`${entry.user.email}|${dayKey}`] ||
-																						shiftStore.name
+																					? shift.custom_store_name || shiftStore.name
 																					: shiftStore.name}
 																			</span>
 																		)}
@@ -809,7 +923,178 @@ export default function WeeklyPlanner() {
 												{fmt(weekShifts.reduce((s, sh) => s + sh.hours, 0))}
 											</td>
 										</tr>
-									</>
+
+									{/* ── Stats summary ──────────────────────────────────── */}
+									{/* Spacer */}
+									<tr>
+										<td colSpan={1 + 7 + stores.length + 2} className="h-3 border-t-2 border-border/30 bg-muted/5" />
+									</tr>
+
+									{/* STAFF PER DAY header */}
+									<tr className="bg-muted/10 border-b">
+										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+											Staff per Day
+										</td>
+										<td colSpan={7 + stores.length + 2} />
+									</tr>
+
+									{/* One row per store */}
+									{stores.map((store) => {
+										const color = getStoreColor(store.id);
+										const isOther = otherStore?.id === store.id;
+										return (
+											<tr key={`spd-${store.id}`} className="border-b">
+												<td
+													className="sticky left-0 z-10 px-3 py-1 border-r text-[10px] font-semibold"
+													style={color && !isOther ? { backgroundColor: color.bg, color: color.text } : undefined}
+												>
+													{store.name}
+												</td>
+												{weekDayKeys.map((dayKey) => {
+													const count = staffAtStoreOnDay(store.id, dayKey);
+													return (
+														<td
+															key={dayKey}
+															className="border-r px-1 py-1.5 text-center text-[11px] font-bold"
+															style={color && !isOther && count > 0 ? { backgroundColor: color.bg, color: color.text } : undefined}
+														>
+															{count > 0 ? count : <span className="text-muted-foreground/20">0</span>}
+														</td>
+													);
+												})}
+												{stores.map((s) => <td key={s.id} className="border-r" />)}
+												<td className="border-r" />
+												<td />
+											</tr>
+										);
+									})}
+
+									{/* Spacer */}
+									<tr>
+										<td colSpan={1 + 7 + stores.length + 2} className="h-3 border-t border-border/20 bg-muted/5" />
+									</tr>
+
+									{/* HOURS PER WEEK sub-header */}
+									<tr className="bg-muted/10 border-b">
+										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+											Hours per Week
+										</td>
+										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{stores.map((store) => {
+											const color = getStoreColor(store.id);
+											return (
+												<td key={store.id} className="px-1 py-1.5 text-center border-r">
+													<span
+														className="text-[9px] font-bold uppercase tracking-wide"
+														style={color ? { color: color.text } : undefined}
+													>
+														{store.name.length > 7 ? store.name.slice(0, 6) + "…" : store.name}
+													</span>
+												</td>
+											);
+										})}
+										<td className="border-r" />
+										<td className="px-1 py-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+											Total
+										</td>
+									</tr>
+
+									{/* NEUHAUS row */}
+									<tr className="border-b">
+										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+											Neuhaus
+										</td>
+										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{stores.map((store) => {
+											const h = neuhausHoursAtStore(store.id);
+											return (
+												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
+													{h > 0 ? <span className="font-semibold">{fmt(h)}</span> : <span className="text-muted-foreground/30">—</span>}
+												</td>
+											);
+										})}
+										<td className="border-r" />
+										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+											{fmt(weekShifts.filter((s) => fixEmails.has(s.email) && !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
+										</td>
+									</tr>
+
+									{/* INTERIM row */}
+									<tr className="border-b">
+										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+											Interim
+										</td>
+										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{stores.map((store) => {
+											const h = interimHoursAtStore(store.id);
+											return (
+												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
+													{h > 0 ? <span className="font-semibold">{fmt(h)}</span> : <span className="text-muted-foreground/30">—</span>}
+												</td>
+											);
+										})}
+										<td className="border-r" />
+										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+											{fmt(weekShifts.filter((s) => !fixEmails.has(s.email) && !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
+										</td>
+									</tr>
+
+									{/* TOTAL WORKED row */}
+									<tr className="border-b bg-muted/10 font-semibold">
+										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground border-r">
+											Total Worked
+										</td>
+										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{stores.map((store) => {
+											const total = totalStoreHours(store.id);
+											return (
+												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
+													{total > 0 ? <span className="font-bold">{fmt(total)}</span> : <span className="text-muted-foreground/30">—</span>}
+												</td>
+											);
+										})}
+										<td className="border-r" />
+										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+											{fmt(weekShifts.filter((s) => !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
+										</td>
+									</tr>
+
+									{/* ABSENT row */}
+									<tr className="border-b">
+										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border-r">
+											Absent
+										</td>
+										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{stores.map((store) => {
+											const h = absentHoursAtStore(store.id);
+											const isOther = otherStore?.id === store.id;
+											return (
+												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
+													{isOther ? (
+														<span className="text-muted-foreground/40 text-[10px]">NA</span>
+													) : h > 0 ? (
+														<span className="font-semibold text-amber-600 dark:text-amber-400">{fmt(h)}</span>
+													) : (
+														<span className="text-muted-foreground/30">—</span>
+													)}
+												</td>
+											);
+										})}
+										<td className="border-r" />
+										<td className="px-1 py-1.5 text-center text-[11px]">
+											{(() => {
+												const total = employeeRows
+													.filter((r) => r.targetHours != null && r.user.role !== "fix")
+													.reduce((sum, r) => sum + Math.max(0, r.targetHours! - assignedHours(r.user.email)), 0);
+												return total > 0 ? (
+													<span className="font-semibold text-amber-600 dark:text-amber-400">{fmt(total)}</span>
+												) : (
+													<span className="text-muted-foreground/30">—</span>
+												);
+											})()}
+										</td>
+									</tr>
+								</>
 								)}
 							</tbody>
 						</table>
@@ -829,22 +1114,44 @@ export default function WeeklyPlanner() {
 						</DialogTitle>
 						<DialogDescription>
 							{existingShift
-								? "Edit or remove the assigned shift."
-								: "Assign a shift for this slot."}
+								? "Edit or remove the assigned slot."
+								: "Assign a shift or mark an absence."}
 						</DialogDescription>
 					</DialogHeader>
 
+					{/* Mode selector */}
+					<div className="flex rounded-lg border overflow-hidden text-xs font-medium">
+						{(
+							[
+								{ value: null,       label: "Shift",    activeClass: "bg-primary text-primary-foreground" },
+								{ value: "sick",     label: "Sick",     activeClass: "bg-rose-500 text-white" },
+								{ value: "vacation", label: "Vacation", activeClass: "bg-blue-500 text-white" },
+								{ value: "recup",    label: "Recup",    activeClass: "bg-amber-500 text-white" },
+							] as Array<{ value: AbsenceType | null; label: string; activeClass: string }>
+						).map(({ value, label, activeClass }) => (
+							<button
+								key={label}
+								type="button"
+								onClick={() => setAbsenceType(value)}
+								className={cn(
+									"flex-1 py-1.5 transition-colors border-r last:border-r-0",
+									absenceType === value
+										? activeClass
+										: "bg-muted/40 text-muted-foreground hover:bg-muted",
+								)}
+							>
+								{label}
+							</button>
+						))}
+					</div>
+
 					{/* Availability badge (students only) */}
-					{selectedDayAvail && (
+					{selectedDayAvail && !absenceType && (
 						<div>
 							{(() => {
 								const style = AVAILABILITY_STYLES[selectedDayAvail];
 								return (
-									<span
-										className={cn(
-											"inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 border bg-muted",
-										)}
-									>
+									<span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 border bg-muted">
 										<span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
 										{style.label}
 									</span>
@@ -853,101 +1160,110 @@ export default function WeeklyPlanner() {
 						</div>
 					)}
 
-					<div className="space-y-3 pt-1">
-						{/* Store */}
-						<div className="space-y-1.5">
-							<label className="text-xs font-medium text-muted-foreground">Store</label>
-							<Select
-								value={selectedStoreId.toString()}
-								onValueChange={(v) => setSelectedStoreId(Number(v))}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue
-										placeholder="Choose store"
-										// value={selectedRow?.user.store_id?.toString()}
-									/>
-								</SelectTrigger>
-								<SelectContent>
-									{stores.map((s) => (
-										<SelectItem key={s.id} value={s.id.toString()}>
-											{s.name}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							{otherStore && selectedStoreId === otherStore.id && (
-								<div className="animate-in fade-in-0 slide-in-from-top-2 duration-200">
-									<Input
-										placeholder="Which store? (optional)"
-										value={otherStoreName}
-										onChange={(e) => setOtherStoreName(e.target.value)}
-										autoFocus
-									/>
+					{absenceType ? (
+						<p className="text-sm text-muted-foreground py-2 text-center">
+							This day will be marked as{" "}
+							<span className="font-semibold text-foreground capitalize">{absenceType}</span>.
+						</p>
+					) : (
+						<div className="space-y-3 pt-1">
+							{/* Store */}
+							<div className="space-y-1.5">
+								<label className="text-xs font-medium text-muted-foreground">Store</label>
+								<Select
+									value={selectedStoreId.toString()}
+									onValueChange={(v) => setSelectedStoreId(Number(v))}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue placeholder="Choose store" />
+									</SelectTrigger>
+									<SelectContent>
+										{stores.map((s) => (
+											<SelectItem key={s.id} value={s.id.toString()}>
+												{s.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								{otherStore && selectedStoreId === otherStore.id && (
+									<div className="animate-in fade-in-0 slide-in-from-top-2 duration-200">
+										<Input
+											placeholder="Which store? (optional)"
+											value={otherStoreName}
+											onChange={(e) => setOtherStoreName(e.target.value)}
+											autoFocus
+										/>
+									</div>
+								)}
+							</div>
+
+							{/* Times */}
+							<div className="grid grid-cols-2 gap-3">
+								<div className="space-y-1.5">
+									<label className="text-xs font-medium text-muted-foreground">Start</label>
+									<Select value={shiftStart} onValueChange={setShiftStart}>
+										<SelectTrigger className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{SHIFT_TIME_OPTIONS.map((t) => (
+												<SelectItem key={`s-${t}`} value={t}>
+													{t}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								</div>
-							)}
-						</div>
-
-						{/* Times */}
-						<div className="grid grid-cols-2 gap-3">
-							<div className="space-y-1.5">
-								<label className="text-xs font-medium text-muted-foreground">Start</label>
-								<Select value={shiftStart} onValueChange={setShiftStart}>
-									<SelectTrigger className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										{SHIFT_TIME_OPTIONS.map((t) => (
-											<SelectItem key={`s-${t}`} value={t}>
-												{t}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+								<div className="space-y-1.5">
+									<label className="text-xs font-medium text-muted-foreground">End</label>
+									<Select value={shiftEnd} onValueChange={setShiftEnd}>
+										<SelectTrigger className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{SHIFT_TIME_OPTIONS.map((t) => (
+												<SelectItem key={`e-${t}`} value={t}>
+													{t}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
 							</div>
-							<div className="space-y-1.5">
-								<label className="text-xs font-medium text-muted-foreground">End</label>
-								<Select value={shiftEnd} onValueChange={setShiftEnd}>
-									<SelectTrigger className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										{SHIFT_TIME_OPTIONS.map((t) => (
-											<SelectItem key={`e-${t}`} value={t}>
-												{t}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
+
+							{/* Break checkbox */}
+							<label className="flex items-center gap-2.5 cursor-pointer select-none">
+								<Checkbox
+									checked={hasBreak}
+									onCheckedChange={(v) => setHasBreak(v === true)}
+								/>
+								<span className="text-sm">30 min break</span>
+								{shiftHours(shiftStart, shiftEnd) >= 6 && !hasBreak && (
+									<span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+										(≥ 6h — break recommended)
+									</span>
+								)}
+							</label>
+
+							{isInvalid ? (
+								<p className="text-xs text-destructive">End time must be after start time.</p>
+							) : shiftStart && shiftEnd ? (
+								(() => {
+									const gross = shiftHours(shiftStart, shiftEnd);
+									const net = gross - (hasBreak ? 0.5 : 0);
+									return (
+										<p className="text-xs text-muted-foreground">
+											<span className="font-semibold text-foreground">{fmt(net)}</span>
+											{" worked"}
+											{hasBreak && (
+												<span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>
+											)}
+										</p>
+									);
+								})()
+							) : null}
 						</div>
-
-						{/* Break checkbox */}
-						<label className="flex items-center gap-2.5 cursor-pointer select-none">
-							<Checkbox checked={hasBreak} onCheckedChange={(v) => setHasBreak(v === true)} />
-							<span className="text-sm">30 min break</span>
-							{shiftHours(shiftStart, shiftEnd) >= 6 && !hasBreak && (
-								<span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-									(≥ 6h — break recommended)
-								</span>
-							)}
-						</label>
-
-						{isInvalid ? (
-							<p className="text-xs text-destructive">End time must be after start time.</p>
-						) : shiftStart && shiftEnd ? (
-							(() => {
-								const gross = shiftHours(shiftStart, shiftEnd);
-								const net = gross - (hasBreak ? 0.5 : 0);
-								return (
-									<p className="text-xs text-muted-foreground">
-										<span className="font-semibold text-foreground">{fmt(net)}</span>
-										{" worked"}
-										{hasBreak && <span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>}
-									</p>
-								);
-							})()
-						) : null}
-					</div>
+					)}
 
 					<DialogFooter className="gap-2">
 						{existingShift && (
@@ -964,8 +1280,12 @@ export default function WeeklyPlanner() {
 						<Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button size="sm" onClick={handleSaveShift} disabled={isInvalid || !selectedStoreId}>
-							{existingShift ? "Update shift" : "Assign shift"}
+						<Button
+							size="sm"
+							onClick={handleSaveShift}
+							disabled={!absenceType && (isInvalid || !selectedStoreId)}
+						>
+							{existingShift ? "Update" : "Assign"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>
