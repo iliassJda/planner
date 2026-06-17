@@ -264,7 +264,7 @@ async function getAllShifts() {
 		return [];
 	}
 
-	console.log("This is all the shifts: ", data);
+	// console.log("This is all the shifts: ", data);
 	return data as Shift[];
 }
 
@@ -273,7 +273,7 @@ async function clearShifts(shifts: Shift[]) {
 	// const shiftsArray = fromRecordToShifts(shifts);
 	const shiftIds = shifts.map((s) => s.id);
 
-	console.log("These are the ID: ", shiftIds, " and there are the shifts: ", shifts);
+	// console.log("These are the ID: ", shiftIds, " and there are the shifts: ", shifts);
 
 	const { data, error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
 

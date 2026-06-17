@@ -72,12 +72,12 @@ function fmt(h: number) {
 type StoreColor = { bg: string; text: string; sub: string };
 
 const NAMED_STORE_COLORS: Array<StoreColor & { keywords: string[] }> = [
-	{ keywords: ["galerie"],          bg: "#fecdd3", text: "#881337", sub: "#be123c" }, // pink
-	{ keywords: ["beurre"],           bg: "#ddd6fe", text: "#3b0764", sub: "#5b21b6" }, // violet/purple
-	{ keywords: ["grand", "place"],   bg: "#bbf7d0", text: "#14532d", sub: "#166534" }, // green
-	{ keywords: ["atelier"],          bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
+	{ keywords: ["galerie"], bg: "#fecdd3", text: "#881337", sub: "#be123c" }, // pink
+	{ keywords: ["beurre"], bg: "#ddd6fe", text: "#3b0764", sub: "#5b21b6" }, // violet/purple
+	{ keywords: ["grand", "place"], bg: "#bbf7d0", text: "#14532d", sub: "#166534" }, // green
+	{ keywords: ["atelier"], bg: "#fef08a", text: "#713f12", sub: "#92400e" }, // yellow
 	{ keywords: ["mad", "madeleine"], bg: "#fed7aa", text: "#7c2d12", sub: "#9a3412" }, // orange
-	{ keywords: ["louise"],           bg: "#bae6fd", text: "#0c4a6e", sub: "#075985" }, // sky
+	{ keywords: ["louise"], bg: "#bae6fd", text: "#0c4a6e", sub: "#075985" }, // sky
 ];
 
 const FALLBACK_STORE_COLORS: StoreColor[] = [
@@ -93,7 +93,7 @@ type EmployeeRow = {
 	targetHours: number | null;
 };
 
-export default function WeeklyPlanner({}: { file: File | null }) {
+export default function WeeklyPlanner() {
 	const user = useUser();
 
 	const [currentWeek, setCurrentWeek] = useState("null");
@@ -132,7 +132,10 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 
 	useEffect(() => {
 		const fetchData = async () => {
-			if (!user) { setIsLoading(false); return; }
+			if (!user) {
+				setIsLoading(false);
+				return;
+			}
 			setIsLoading(true);
 			try {
 				const [weekData, avails, storeData, userData, shifts] = await Promise.all([
@@ -170,20 +173,22 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 	const weekDayKeys = weekDays.map((d) => format(d, "yyyy-MM-dd"));
 
 	const DAY_KEYS = [
-		"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+		"monday",
+		"tuesday",
+		"wednesday",
+		"thursday",
+		"friday",
+		"saturday",
+		"sunday",
 	] as const;
 
-	const weekAvails = weekObj
-		? availabilityData.filter((a) => a.week_id === weekObj.id)
-		: [];
+	const weekAvails = weekObj ? availabilityData.filter((a) => a.week_id === weekObj.id) : [];
 
 	const employeeRows: EmployeeRow[] = [
 		// Fix employees first (no availability, always shown)
 		...users
 			.filter((u) => u.role === "fix")
-			.sort((a, b) =>
-				(a.nickname || a.first_name).localeCompare(b.nickname || b.first_name),
-			)
+			.sort((a, b) => (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name))
 			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null })),
 
 		// Students with availability for this week
@@ -204,17 +209,14 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 			})
 			.filter((x): x is EmployeeRow => x !== null)
 			.sort((a, b) =>
-				(a.user.nickname || a.user.first_name).localeCompare(
-					b.user.nickname || b.user.first_name,
-				),
+				(a.user.nickname || a.user.first_name).localeCompare(b.user.nickname || b.user.first_name),
 			),
 	];
 
 	const weekShifts = assignedShifts.filter((s) => weekDayKeys.includes(s.shift_date));
 
 	const shiftsFor = (email: string) => weekShifts.filter((s) => s.email === email);
-	const assignedHours = (email: string) =>
-		shiftsFor(email).reduce((sum, s) => sum + s.hours, 0);
+	const assignedHours = (email: string) => shiftsFor(email).reduce((sum, s) => sum + s.hours, 0);
 	const storeHours = (email: string, storeId: number) =>
 		shiftsFor(email)
 			.filter((s) => s.store_id === storeId)
@@ -232,7 +234,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 				(s) => s.email === selectedRow?.user.email && s.shift_date === selectedDayKey,
 			)
 		: undefined;
-	const selectedDayAvail = selectedDayKey ? selectedRow?.days[selectedDayKey]?.availability : undefined;
+	const selectedDayAvail = selectedDayKey
+		? selectedRow?.days[selectedDayKey]?.availability
+		: undefined;
 	const isInvalid = shiftEnd <= shiftStart;
 
 	const openDialog = (row: EmployeeRow, day: Date) => {
@@ -267,11 +271,28 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
 			if (idx !== -1) {
 				const next = [...prev];
-				next[idx] = { ...next[idx], store_id: selectedStoreId, start_time: shiftStart, end_time: shiftEnd, hours };
+				next[idx] = {
+					...next[idx],
+					store_id: selectedStoreId,
+					start_time: shiftStart,
+					end_time: shiftEnd,
+					hours,
+				};
 				return next;
 			}
 			const tempId = Math.min(...prev.map((s) => s.id), 0) - 1;
-			return [...prev, { id: tempId, email, shift_date: dayKey, store_id: selectedStoreId, start_time: shiftStart, end_time: shiftEnd, hours }];
+			return [
+				...prev,
+				{
+					id: tempId,
+					email,
+					shift_date: dayKey,
+					store_id: selectedStoreId,
+					start_time: shiftStart,
+					end_time: shiftEnd,
+					hours,
+				},
+			];
 		});
 		setDialogOpen(false);
 	};
@@ -285,7 +306,10 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 	};
 
 	const handleSaveSchedule = async () => {
-		if (weekShifts.length === 0) { toast.info("No shifts to save for this week."); return; }
+		if (weekShifts.length === 0) {
+			toast.info("No shifts to save for this week.");
+			return;
+		}
 		setIsSaving(true);
 		try {
 			// Full-replace: clear existing DB entries then re-insert everything
@@ -306,7 +330,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 
 			const refreshed = await getAllShifts();
 			setAssignedShifts(refreshed);
-			toast.success(`Schedule saved — ${weekShifts.length} shift${weekShifts.length !== 1 ? "s" : ""}`);
+			toast.success(
+				`Schedule saved — ${weekShifts.length} shift${weekShifts.length !== 1 ? "s" : ""}`,
+			);
 		} catch {
 			toast.error("Could not save schedule. Please try again.");
 		} finally {
@@ -315,7 +341,11 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 	};
 
 	const handleConfirmClear = async () => {
-		if (weekShifts.length === 0) { toast.info("No shifts to clear."); setClearDialogOpen(false); return; }
+		if (weekShifts.length === 0) {
+			toast.info("No shifts to clear.");
+			setClearDialogOpen(false);
+			return;
+		}
 		setIsClearing(true);
 		try {
 			await clearShifts(weekShifts);
@@ -339,7 +369,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 			{/* Page header */}
 			<div>
 				<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Planner</h1>
-				<p className="text-muted-foreground text-sm mt-0.5">Build and manage weekly staff schedules</p>
+				<p className="text-muted-foreground text-sm mt-0.5">
+					Build and manage weekly staff schedules
+				</p>
 			</div>
 
 			{/* Toolbar */}
@@ -417,7 +449,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 					</div>
 					<div>
 						<p className="font-semibold text-foreground">No week selected</p>
-						<p className="text-sm text-muted-foreground mt-1">Choose a week from the dropdown above to start building the schedule.</p>
+						<p className="text-sm text-muted-foreground mt-1">
+							Choose a week from the dropdown above to start building the schedule.
+						</p>
 					</div>
 				</div>
 			)}
@@ -428,9 +462,7 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 					{/* Table caption */}
 					<div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
 						<h2 className="font-semibold text-sm">{currentWeek}</h2>
-						<span className="text-xs text-muted-foreground">
-							{employeeRows.length} employees
-						</span>
+						<span className="text-xs text-muted-foreground">{employeeRows.length} employees</span>
 					</div>
 
 					<div className="overflow-x-auto">
@@ -438,8 +470,12 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 							{/* ── Column group widths ── */}
 							<colgroup>
 								<col className="w-44" />
-								{weekDays.map((d) => <col key={d.toISOString()} className="w-28" />)}
-								{stores.map((s) => <col key={s.id} className="w-16" />)}
+								{weekDays.map((d) => (
+									<col key={d.toISOString()} className="w-28" />
+								))}
+								{stores.map((s) => (
+									<col key={s.id} className="w-16" />
+								))}
 								<col className="w-16" />
 								<col className="w-16" />
 							</colgroup>
@@ -452,9 +488,16 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 									</th>
 									{/* Day headers */}
 									{weekDays.map((day) => (
-										<th key={day.toISOString()} className="px-2 py-2.5 text-center font-semibold border-r">
-											<div className="text-foreground text-[11px]">{format(day, "EEE").toUpperCase()}</div>
-											<div className="text-muted-foreground font-normal text-[10px] mt-0.5">{format(day, "d MMM")}</div>
+										<th
+											key={day.toISOString()}
+											className="px-2 py-2.5 text-center font-semibold border-r"
+										>
+											<div className="text-foreground text-[11px]">
+												{format(day, "EEE").toUpperCase()}
+											</div>
+											<div className="text-muted-foreground font-normal text-[10px] mt-0.5">
+												{format(day, "d MMM")}
+											</div>
 										</th>
 									))}
 									{/* Store headers */}
@@ -468,7 +511,14 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 											>
 												<div className="flex flex-col items-center gap-1">
 													{colorMode && color && (
-														<span className="h-2 w-2 rounded-full block" style={{ backgroundColor: color.bg, outline: `2px solid ${color.text}`, outlineOffset: "-2px" }} />
+														<span
+															className="h-2 w-2 rounded-full block"
+															style={{
+																backgroundColor: color.bg,
+																outline: `2px solid ${color.text}`,
+																outlineOffset: "-2px",
+															}}
+														/>
 													)}
 													<span className="truncate block max-w-14 mx-auto">
 														{store.name.length > 7 ? store.name.slice(0, 6) + "…" : store.name}
@@ -533,7 +583,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 																</AvatarFallback>
 															</Avatar>
 															<div className="min-w-0">
-																<p className="font-semibold truncate text-[11px] leading-tight">{displayName}</p>
+																<p className="font-semibold truncate text-[11px] leading-tight">
+																	{displayName}
+																</p>
 																<p
 																	className={cn(
 																		"text-[9px] leading-tight font-medium mt-0.5",
@@ -568,7 +620,8 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 														const shiftStore = shift
 															? stores.find((s) => s.id === shift.store_id)
 															: undefined;
-														const shiftColor = shift && colorMode ? getStoreColor(shift.store_id) : null;
+														const shiftColor =
+															shift && colorMode ? getStoreColor(shift.store_id) : null;
 
 														return (
 															<td
@@ -576,8 +629,15 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 																onClick={() => openDialog(entry, day)}
 																className={cn(
 																	"relative border-r cursor-pointer transition-colors h-[60px] text-center align-middle p-0",
-																	!shiftColor && isUnavailable && !isFix && !shift && "bg-muted/20 hover:bg-muted/30",
-																	!shiftColor && !shift && !(isUnavailable && !isFix) && "hover:bg-primary/5",
+																	!shiftColor &&
+																		isUnavailable &&
+																		!isFix &&
+																		!shift &&
+																		"bg-muted/20 hover:bg-muted/30",
+																	!shiftColor &&
+																		!shift &&
+																		!(isUnavailable && !isFix) &&
+																		"hover:bg-primary/5",
 																	!shiftColor && shift && "hover:bg-primary/[0.07]",
 																)}
 																style={shiftColor ? { backgroundColor: shiftColor.bg } : undefined}
@@ -613,7 +673,12 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 																) : (
 																	<div className="relative z-10 flex flex-col items-center justify-center h-full gap-0.5">
 																		{availStyle && !isUnavailable && (
-																			<span className={cn("text-[10px] font-semibold", availStyle.color)}>
+																			<span
+																				className={cn(
+																					"text-[10px] font-semibold",
+																					availStyle.color,
+																				)}
+																			>
 																				{availStyle.short}
 																			</span>
 																		)}
@@ -632,7 +697,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 														return (
 															<td key={store.id} className="border-r px-1 py-2 text-center">
 																{h > 0 ? (
-																	<span className="text-[11px] font-semibold text-foreground">{fmt(h)}</span>
+																	<span className="text-[11px] font-semibold text-foreground">
+																		{fmt(h)}
+																	</span>
 																) : (
 																	<span className="text-muted-foreground/30 text-[11px]">—</span>
 																)}
@@ -656,7 +723,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 													{/* Total */}
 													<td className="px-1 py-2 text-center">
 														{target != null ? (
-															<span className="text-[11px] font-semibold text-foreground">{fmt(target)}</span>
+															<span className="text-[11px] font-semibold text-foreground">
+																{fmt(target)}
+															</span>
 														) : (
 															<span className="text-muted-foreground/30 text-[11px]">—</span>
 														)}
@@ -688,12 +757,21 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 											{stores.map((store) => {
 												const total = totalStoreHours(store.id);
 												return (
-													<td key={store.id} className="border-r px-1 py-2 text-center text-foreground text-[11px]">
-														{total > 0 ? fmt(total) : <span className="text-muted-foreground/30">—</span>}
+													<td
+														key={store.id}
+														className="border-r px-1 py-2 text-center text-foreground text-[11px]"
+													>
+														{total > 0 ? (
+															fmt(total)
+														) : (
+															<span className="text-muted-foreground/30">—</span>
+														)}
 													</td>
 												);
 											})}
-											<td className="border-r px-1 py-2 text-center text-muted-foreground/40 text-[11px]">—</td>
+											<td className="border-r px-1 py-2 text-center text-muted-foreground/40 text-[11px]">
+												—
+											</td>
 											<td className="px-1 py-2 text-center text-foreground text-[11px]">
 												{fmt(weekShifts.reduce((s, sh) => s + sh.hours, 0))}
 											</td>
@@ -717,7 +795,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 							</span>
 						</DialogTitle>
 						<DialogDescription>
-							{existingShift ? "Edit or remove the assigned shift." : "Assign a shift for this slot."}
+							{existingShift
+								? "Edit or remove the assigned shift."
+								: "Assign a shift for this slot."}
 						</DialogDescription>
 					</DialogHeader>
 
@@ -771,7 +851,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 									</SelectTrigger>
 									<SelectContent>
 										{SHIFT_TIME_OPTIONS.map((t) => (
-											<SelectItem key={`s-${t}`} value={t}>{t}</SelectItem>
+											<SelectItem key={`s-${t}`} value={t}>
+												{t}
+											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
@@ -784,7 +866,9 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 									</SelectTrigger>
 									<SelectContent>
 										{SHIFT_TIME_OPTIONS.map((t) => (
-											<SelectItem key={`e-${t}`} value={t}>{t}</SelectItem>
+											<SelectItem key={`e-${t}`} value={t}>
+												{t}
+											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
@@ -793,10 +877,7 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 
 						{/* Break checkbox */}
 						<label className="flex items-center gap-2.5 cursor-pointer select-none">
-							<Checkbox
-								checked={hasBreak}
-								onCheckedChange={(v) => setHasBreak(v === true)}
-							/>
+							<Checkbox checked={hasBreak} onCheckedChange={(v) => setHasBreak(v === true)} />
 							<span className="text-sm">30 min break</span>
 							{shiftHours(shiftStart, shiftEnd) >= 6 && !hasBreak && (
 								<span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
@@ -815,9 +896,7 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 									<p className="text-xs text-muted-foreground">
 										<span className="font-semibold text-foreground">{fmt(net)}</span>
 										{" worked"}
-										{hasBreak && (
-											<span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>
-										)}
+										{hasBreak && <span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>}
 									</p>
 								);
 							})()
@@ -839,11 +918,7 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 						<Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button
-							size="sm"
-							onClick={handleSaveShift}
-							disabled={isInvalid || !selectedStoreId}
-						>
+						<Button size="sm" onClick={handleSaveShift} disabled={isInvalid || !selectedStoreId}>
 							{existingShift ? "Update shift" : "Assign shift"}
 						</Button>
 					</DialogFooter>
@@ -857,15 +932,22 @@ export default function WeeklyPlanner({}: { file: File | null }) {
 						<DialogTitle>Clear all shifts?</DialogTitle>
 						<DialogDescription>
 							This will permanently delete all{" "}
-							<strong>{weekShifts.length} shift{weekShifts.length !== 1 ? "s" : ""}</strong> for{" "}
-							<strong>{currentWeek}</strong>. This cannot be undone.
+							<strong>
+								{weekShifts.length} shift{weekShifts.length !== 1 ? "s" : ""}
+							</strong>{" "}
+							for <strong>{currentWeek}</strong>. This cannot be undone.
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
 						<Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
 							Cancel
 						</Button>
-						<Button variant="destructive" size="sm" onClick={handleConfirmClear} disabled={isClearing}>
+						<Button
+							variant="destructive"
+							size="sm"
+							onClick={handleConfirmClear}
+							disabled={isClearing}
+						>
 							{isClearing ? "Clearing…" : "Clear all"}
 						</Button>
 					</DialogFooter>

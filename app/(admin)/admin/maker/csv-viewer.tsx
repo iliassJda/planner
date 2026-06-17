@@ -19,7 +19,7 @@ export default function CsvViewer({ file }: CsvViewerProps) {
 				const lines = fileText.split("\n").filter((line) => line.trim());
 				const parsedRows = lines.map((line) => line.split(",").map((cell) => cell.trim()));
 				setRows(parsedRows);
-				console.log("These are the rows: ", parsedRows);
+				// console.log("These are the rows: ", parsedRows);
 			} catch (error) {
 				console.error("Error parsing CSV:", error);
 			} finally {
