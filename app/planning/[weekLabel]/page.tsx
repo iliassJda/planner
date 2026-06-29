@@ -5,7 +5,7 @@ import { format, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { getWeekStartDate } from "@/help_functions";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutDashboard } from "lucide-react";
 import type { Shift, Store } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -112,9 +112,13 @@ export default async function PlanningPage({
 			<header className="border-b bg-card px-4 py-4 sm:px-6">
 				<div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
 					<div>
-						<p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+						<Link
+							href="/dashboard"
+							className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+						>
+							<LayoutDashboard className="h-3 w-3" />
 							Neuhaus · Planning
-						</p>
+						</Link>
 						<h1 className="text-xl font-bold tracking-tight mt-0.5">{label}</h1>
 						<p className="text-xs text-muted-foreground mt-0.5">
 							{format(weekDays[0], "d MMM", { locale: fr })} –{" "}
