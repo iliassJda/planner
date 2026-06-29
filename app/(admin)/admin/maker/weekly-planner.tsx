@@ -39,14 +39,36 @@ import {
 	clearShifts,
 } from "@/action/supabase";
 import { addDays, format } from "date-fns";
-import { RefreshCw, Save, Trash2, CalendarPlus, X, ChevronDown, Palette, FileSpreadsheet, Check, Share2 } from "lucide-react";
+import {
+	RefreshCw,
+	Save,
+	Trash2,
+	CalendarPlus,
+	X,
+	ChevronDown,
+	Palette,
+	FileSpreadsheet,
+	Check,
+	Share2,
+	Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/user-context";
 
-import { Availability, User, Week, DayAvailability, Store, ShiftAssignment, Shift, AbsenceType } from "@/types";
+import {
+	Availability,
+	User,
+	Week,
+	DayAvailability,
+	Store,
+	ShiftAssignment,
+	Shift,
+	AbsenceType,
+} from "@/types";
 import { getInitials, AVAILABILITY_STYLES, getWeekStartDate } from "@/help_functions";
 import { exportWeekToExcel } from "@/lib/export-excel";
+import { generatePlanning } from "@/action/generate-planning";
 
 // 9:00 → 22:00 in 15-min steps
 const SHIFT_TIME_OPTIONS = Array.from({ length: 53 }, (_, i) => {
@@ -96,7 +118,6 @@ export type EmployeeRow = {
 	hasAvailability?: boolean;
 };
 
-
 export default function WeeklyPlanner() {
 	const user = useUser();
 
@@ -125,9 +146,10 @@ export default function WeeklyPlanner() {
 	const [linkCopied, setLinkCopied] = useState(false);
 
 	const handleCopyLink = () => {
-		const url = currentWeek !== "null"
-			? `${window.location.origin}/planning/${encodeURIComponent(currentWeek)}`
-			: `${window.location.origin}/planning`;
+		const url =
+			currentWeek !== "null"
+				? `${window.location.origin}/planning/${encodeURIComponent(currentWeek)}`
+				: `${window.location.origin}/planning`;
 		navigator.clipboard.writeText(url).then(() => {
 			setLinkCopied(true);
 			setTimeout(() => setLinkCopied(false), 2000);
@@ -136,6 +158,12 @@ export default function WeeklyPlanner() {
 
 	// Clear dialog
 	const [clearDialogOpen, setClearDialogOpen] = useState(false);
+
+	// AI generate dialog
+	const [aiDialogOpen, setAiDialogOpen] = useState(false);
+	const [aiNote, setAiNote] = useState("");
+	const [isGenerating, setIsGenerating] = useState(false);
+	const [aiStep, setAiStep] = useState("");
 
 	// Color mode
 	const [colorMode, setColorMode] = useState(false);
@@ -228,7 +256,12 @@ export default function WeeklyPlanner() {
 				if (pa !== pb) return pa - pb;
 				return (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name);
 			})
-			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null, hasAvailability: true })),
+			.map((u) => ({
+				user: u,
+				days: {} as EmployeeRow["days"],
+				targetHours: null,
+				hasAvailability: true,
+			})),
 
 		// Students with availability for this week
 		...weekAvails
@@ -254,10 +287,13 @@ export default function WeeklyPlanner() {
 		// Students who did NOT submit availability
 		...users
 			.filter((u) => u.role !== "fix" && u.role !== "admin" && !emailsWithAvailability.has(u.email))
-			.sort((a, b) =>
-				(a.nickname || a.first_name).localeCompare(b.nickname || b.first_name),
-			)
-			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null, hasAvailability: false })),
+			.sort((a, b) => (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name))
+			.map((u) => ({
+				user: u,
+				days: {} as EmployeeRow["days"],
+				targetHours: null,
+				hasAvailability: false,
+			})),
 	];
 
 	const weekShifts = assignedShifts.filter((s) => weekDayKeys.includes(s.shift_date));
@@ -283,10 +319,14 @@ export default function WeeklyPlanner() {
 		).size;
 
 	const neuhausHoursAtStore = (storeId: number) =>
-		weekShifts.filter((s) => s.store_id === storeId && fixEmails.has(s.email)).reduce((sum, s) => sum + s.hours, 0);
+		weekShifts
+			.filter((s) => s.store_id === storeId && fixEmails.has(s.email))
+			.reduce((sum, s) => sum + s.hours, 0);
 
 	const interimHoursAtStore = (storeId: number) =>
-		weekShifts.filter((s) => s.store_id === storeId && !fixEmails.has(s.email)).reduce((sum, s) => sum + s.hours, 0);
+		weekShifts
+			.filter((s) => s.store_id === storeId && !fixEmails.has(s.email))
+			.reduce((sum, s) => sum + s.hours, 0);
 
 	const absentHoursAtStore = (storeId: number) => {
 		let total = 0;
@@ -453,6 +493,82 @@ export default function WeeklyPlanner() {
 		}
 	};
 
+	const handleGenerate = async () => {
+		if (!weekObj) return;
+		setIsGenerating(true);
+
+		const steps = [
+			"Analysing availabilities…",
+			"Assigning fix employees…",
+			"Optimising student coverage…",
+			"Balancing store distribution…",
+			"Finalising schedule…",
+		];
+		let stepIdx = 0;
+		setAiStep(steps[0]);
+		const stepTimer = setInterval(() => {
+			stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+			setAiStep(steps[stepIdx]);
+		}, 3000);
+
+		try {
+			const fixUsersData = users
+				.filter((u) => u.role === "fix")
+				.map((u) => ({
+					email: u.email,
+					name: u.nickname || u.first_name,
+					store_id: u.store_id ?? null,
+				}));
+
+			const studentAvailabilities = weekAvails
+				.map((a) => {
+					const u = users.find((u) => u.email === a.email);
+					if (!u || u.role === "fix") return null;
+					const days: Record<string, string> = {};
+					weekDayKeys.forEach((key, i) => {
+						days[key] = a[DAY_KEYS[i]];
+					});
+					return {
+						email: u.email,
+						name: u.nickname || u.first_name,
+						days,
+						desiredHours: a.hours,
+					};
+				})
+				.filter((x): x is NonNullable<typeof x> => x !== null);
+
+			const result = await generatePlanning({
+				stores,
+				fixUsers: fixUsersData,
+				studentAvailabilities,
+				weekDayKeys,
+				managerNote: aiNote,
+			});
+
+			clearInterval(stepTimer);
+
+			if (result.error) {
+				toast.error(result.error);
+				return;
+			}
+
+			setAssignedShifts((prev) => {
+				const withoutWeek = prev.filter((s) => !weekDayKeys.includes(s.shift_date));
+				return [...withoutWeek, ...result.shifts];
+			});
+			setIsDirty(true);
+			setAiDialogOpen(false);
+			setAiNote("");
+			toast.success(`Generated ${result.shifts.length} shifts — review and save when ready`);
+		} catch {
+			toast.error("Failed to generate planning. Please try again.");
+		} finally {
+			clearInterval(stepTimer);
+			setIsGenerating(false);
+			setAiStep("");
+		}
+	};
+
 	// ── Render ─────────────────────────────────────────────────────────────────
 
 	if (!user) return <div className="p-6 text-sm text-muted-foreground">No user found.</div>;
@@ -554,6 +670,15 @@ export default function WeeklyPlanner() {
 					>
 						<FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
 						Export Excel
+					</Button>
+					<Button
+						variant={process.env.NODE_ENV !== "development" ? "ghost" : "outline"}
+						size="sm"
+						onClick={() => setAiDialogOpen(true)}
+						disabled={process.env.NODE_ENV !== "development" || currentWeek === "null"}
+					>
+						<Sparkles className="h-3.5 w-3.5 mr-1.5" />
+						AI Generate
 					</Button>
 					<Button
 						variant="outline"
@@ -712,7 +837,10 @@ export default function WeeklyPlanner() {
 													>
 														<div className="flex items-center gap-2">
 															<Avatar className="h-7 w-7 shrink-0 border">
-																<AvatarImage src={entry.user.image || undefined} alt={displayName} />
+																<AvatarImage
+																	src={entry.user.image || undefined}
+																	alt={displayName}
+																/>
 																<AvatarFallback className="text-[9px] font-bold bg-primary/5 text-primary">
 																	{getInitials(displayName)}
 																</AvatarFallback>
@@ -941,177 +1069,251 @@ export default function WeeklyPlanner() {
 											</td>
 										</tr>
 
-									{/* ── Stats summary ──────────────────────────────────── */}
-									{/* Spacer */}
-									<tr>
-										<td colSpan={1 + 7 + stores.length + 2} className="h-3 border-t-2 border-border/30 bg-muted/5" />
-									</tr>
+										{/* ── Stats summary ──────────────────────────────────── */}
+										{/* Spacer */}
+										<tr>
+											<td
+												colSpan={1 + 7 + stores.length + 2}
+												className="h-3 border-t-2 border-border/30 bg-muted/5"
+											/>
+										</tr>
 
-									{/* STAFF PER DAY header */}
-									<tr className="bg-muted/10 border-b">
-										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
-											Staff per Day
-										</td>
-										<td colSpan={7 + stores.length + 2} />
-									</tr>
+										{/* STAFF PER DAY header */}
+										<tr className="bg-muted/10 border-b">
+											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+												Staff per Day
+											</td>
+											<td colSpan={7 + stores.length + 2} />
+										</tr>
 
-									{/* One row per store */}
-									{stores.map((store) => {
-										const color = getStoreColor(store.id);
-										const isOther = otherStore?.id === store.id;
-										return (
-											<tr key={`spd-${store.id}`} className="border-b">
-												<td
-													className="sticky left-0 z-10 px-3 py-1 border-r text-[10px] font-semibold"
-													style={color && !isOther ? { backgroundColor: color.bg, color: color.text } : undefined}
-												>
-													{store.name}
-												</td>
-												{weekDayKeys.map((dayKey) => {
-													const count = staffAtStoreOnDay(store.id, dayKey);
-													return (
-														<td
-															key={dayKey}
-															className="border-r px-1 py-1.5 text-center text-[11px] font-bold"
-															style={color && !isOther && count > 0 ? { backgroundColor: color.bg, color: color.text } : undefined}
-														>
-															{count > 0 ? count : <span className="text-muted-foreground/20">0</span>}
-														</td>
-													);
-												})}
-												{stores.map((s) => <td key={s.id} className="border-r" />)}
-												<td className="border-r" />
-												<td />
-											</tr>
-										);
-									})}
-
-									{/* Spacer */}
-									<tr>
-										<td colSpan={1 + 7 + stores.length + 2} className="h-3 border-t border-border/20 bg-muted/5" />
-									</tr>
-
-									{/* HOURS PER WEEK sub-header */}
-									<tr className="bg-muted/10 border-b">
-										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
-											Hours per Week
-										</td>
-										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
+										{/* One row per store */}
 										{stores.map((store) => {
 											const color = getStoreColor(store.id);
-											return (
-												<td key={store.id} className="px-1 py-1.5 text-center border-r">
-													<span
-														className="text-[9px] font-bold uppercase tracking-wide"
-														style={color ? { color: color.text } : undefined}
-													>
-														{store.name.length > 7 ? store.name.slice(0, 6) + "…" : store.name}
-													</span>
-												</td>
-											);
-										})}
-										<td className="border-r" />
-										<td className="px-1 py-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
-											Total
-										</td>
-									</tr>
-
-									{/* NEUHAUS row */}
-									<tr className="border-b">
-										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
-											Neuhaus
-										</td>
-										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
-										{stores.map((store) => {
-											const h = neuhausHoursAtStore(store.id);
-											return (
-												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
-													{h > 0 ? <span className="font-semibold">{fmt(h)}</span> : <span className="text-muted-foreground/30">—</span>}
-												</td>
-											);
-										})}
-										<td className="border-r" />
-										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
-											{fmt(weekShifts.filter((s) => fixEmails.has(s.email) && !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
-										</td>
-									</tr>
-
-									{/* INTERIM row */}
-									<tr className="border-b">
-										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
-											Interim
-										</td>
-										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
-										{stores.map((store) => {
-											const h = interimHoursAtStore(store.id);
-											return (
-												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
-													{h > 0 ? <span className="font-semibold">{fmt(h)}</span> : <span className="text-muted-foreground/30">—</span>}
-												</td>
-											);
-										})}
-										<td className="border-r" />
-										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
-											{fmt(weekShifts.filter((s) => !fixEmails.has(s.email) && !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
-										</td>
-									</tr>
-
-									{/* TOTAL WORKED row */}
-									<tr className="border-b bg-muted/10 font-semibold">
-										<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground border-r">
-											Total Worked
-										</td>
-										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
-										{stores.map((store) => {
-											const total = totalStoreHours(store.id);
-											return (
-												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
-													{total > 0 ? <span className="font-bold">{fmt(total)}</span> : <span className="text-muted-foreground/30">—</span>}
-												</td>
-											);
-										})}
-										<td className="border-r" />
-										<td className="px-1 py-1.5 text-center text-[11px] font-bold">
-											{fmt(weekShifts.filter((s) => !s.absence_type).reduce((sum, s) => sum + s.hours, 0))}
-										</td>
-									</tr>
-
-									{/* ABSENT row */}
-									<tr className="border-b">
-										<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border-r">
-											Absent
-										</td>
-										{weekDayKeys.map((key) => <td key={key} className="border-r" />)}
-										{stores.map((store) => {
-											const h = absentHoursAtStore(store.id);
 											const isOther = otherStore?.id === store.id;
 											return (
-												<td key={store.id} className="border-r px-1 py-1.5 text-center text-[11px]">
-													{isOther ? (
-														<span className="text-muted-foreground/40 text-[10px]">NA</span>
-													) : h > 0 ? (
-														<span className="font-semibold text-amber-600 dark:text-amber-400">{fmt(h)}</span>
-													) : (
-														<span className="text-muted-foreground/30">—</span>
-													)}
-												</td>
+												<tr key={`spd-${store.id}`} className="border-b">
+													<td
+														className="sticky left-0 z-10 px-3 py-1 border-r text-[10px] font-semibold"
+														style={
+															color && !isOther
+																? { backgroundColor: color.bg, color: color.text }
+																: undefined
+														}
+													>
+														{store.name}
+													</td>
+													{weekDayKeys.map((dayKey) => {
+														const count = staffAtStoreOnDay(store.id, dayKey);
+														return (
+															<td
+																key={dayKey}
+																className="border-r px-1 py-1.5 text-center text-[11px] font-bold"
+																style={
+																	color && !isOther && count > 0
+																		? { backgroundColor: color.bg, color: color.text }
+																		: undefined
+																}
+															>
+																{count > 0 ? (
+																	count
+																) : (
+																	<span className="text-muted-foreground/20">0</span>
+																)}
+															</td>
+														);
+													})}
+													{stores.map((s) => (
+														<td key={s.id} className="border-r" />
+													))}
+													<td className="border-r" />
+													<td />
+												</tr>
 											);
 										})}
-										<td className="border-r" />
-										<td className="px-1 py-1.5 text-center text-[11px]">
-											{(() => {
-												const total = employeeRows
-													.filter((r) => r.targetHours != null && r.user.role !== "fix")
-													.reduce((sum, r) => sum + Math.max(0, r.targetHours! - assignedHours(r.user.email)), 0);
-												return total > 0 ? (
-													<span className="font-semibold text-amber-600 dark:text-amber-400">{fmt(total)}</span>
-												) : (
-													<span className="text-muted-foreground/30">—</span>
+
+										{/* Spacer */}
+										<tr>
+											<td
+												colSpan={1 + 7 + stores.length + 2}
+												className="h-3 border-t border-border/20 bg-muted/5"
+											/>
+										</tr>
+
+										{/* HOURS PER WEEK sub-header */}
+										<tr className="bg-muted/10 border-b">
+											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+												Hours per Week
+											</td>
+											{weekDayKeys.map((key) => (
+												<td key={key} className="border-r" />
+											))}
+											{stores.map((store) => {
+												const color = getStoreColor(store.id);
+												return (
+													<td key={store.id} className="px-1 py-1.5 text-center border-r">
+														<span
+															className="text-[9px] font-bold uppercase tracking-wide"
+															style={color ? { color: color.text } : undefined}
+														>
+															{store.name.length > 7 ? store.name.slice(0, 6) + "…" : store.name}
+														</span>
+													</td>
 												);
-											})()}
-										</td>
-									</tr>
-								</>
+											})}
+											<td className="border-r" />
+											<td className="px-1 py-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+												Total
+											</td>
+										</tr>
+
+										{/* NEUHAUS row */}
+										<tr className="border-b">
+											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+												Neuhaus
+											</td>
+											{weekDayKeys.map((key) => (
+												<td key={key} className="border-r" />
+											))}
+											{stores.map((store) => {
+												const h = neuhausHoursAtStore(store.id);
+												return (
+													<td
+														key={store.id}
+														className="border-r px-1 py-1.5 text-center text-[11px]"
+													>
+														{h > 0 ? (
+															<span className="font-semibold">{fmt(h)}</span>
+														) : (
+															<span className="text-muted-foreground/30">—</span>
+														)}
+													</td>
+												);
+											})}
+											<td className="border-r" />
+											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+												{fmt(
+													weekShifts
+														.filter((s) => fixEmails.has(s.email) && !s.absence_type)
+														.reduce((sum, s) => sum + s.hours, 0),
+												)}
+											</td>
+										</tr>
+
+										{/* INTERIM row */}
+										<tr className="border-b">
+											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+												Interim
+											</td>
+											{weekDayKeys.map((key) => (
+												<td key={key} className="border-r" />
+											))}
+											{stores.map((store) => {
+												const h = interimHoursAtStore(store.id);
+												return (
+													<td
+														key={store.id}
+														className="border-r px-1 py-1.5 text-center text-[11px]"
+													>
+														{h > 0 ? (
+															<span className="font-semibold">{fmt(h)}</span>
+														) : (
+															<span className="text-muted-foreground/30">—</span>
+														)}
+													</td>
+												);
+											})}
+											<td className="border-r" />
+											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+												{fmt(
+													weekShifts
+														.filter((s) => !fixEmails.has(s.email) && !s.absence_type)
+														.reduce((sum, s) => sum + s.hours, 0),
+												)}
+											</td>
+										</tr>
+
+										{/* TOTAL WORKED row */}
+										<tr className="border-b bg-muted/10 font-semibold">
+											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground border-r">
+												Total Worked
+											</td>
+											{weekDayKeys.map((key) => (
+												<td key={key} className="border-r" />
+											))}
+											{stores.map((store) => {
+												const total = totalStoreHours(store.id);
+												return (
+													<td
+														key={store.id}
+														className="border-r px-1 py-1.5 text-center text-[11px]"
+													>
+														{total > 0 ? (
+															<span className="font-bold">{fmt(total)}</span>
+														) : (
+															<span className="text-muted-foreground/30">—</span>
+														)}
+													</td>
+												);
+											})}
+											<td className="border-r" />
+											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
+												{fmt(
+													weekShifts
+														.filter((s) => !s.absence_type)
+														.reduce((sum, s) => sum + s.hours, 0),
+												)}
+											</td>
+										</tr>
+
+										{/* ABSENT row */}
+										<tr className="border-b">
+											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border-r">
+												Absent
+											</td>
+											{weekDayKeys.map((key) => (
+												<td key={key} className="border-r" />
+											))}
+											{stores.map((store) => {
+												const h = absentHoursAtStore(store.id);
+												const isOther = otherStore?.id === store.id;
+												return (
+													<td
+														key={store.id}
+														className="border-r px-1 py-1.5 text-center text-[11px]"
+													>
+														{isOther ? (
+															<span className="text-muted-foreground/40 text-[10px]">NA</span>
+														) : h > 0 ? (
+															<span className="font-semibold text-amber-600 dark:text-amber-400">
+																{fmt(h)}
+															</span>
+														) : (
+															<span className="text-muted-foreground/30">—</span>
+														)}
+													</td>
+												);
+											})}
+											<td className="border-r" />
+											<td className="px-1 py-1.5 text-center text-[11px]">
+												{(() => {
+													const total = employeeRows
+														.filter((r) => r.targetHours != null && r.user.role !== "fix")
+														.reduce(
+															(sum, r) =>
+																sum + Math.max(0, r.targetHours! - assignedHours(r.user.email)),
+															0,
+														);
+													return total > 0 ? (
+														<span className="font-semibold text-amber-600 dark:text-amber-400">
+															{fmt(total)}
+														</span>
+													) : (
+														<span className="text-muted-foreground/30">—</span>
+													);
+												})()}
+											</td>
+										</tr>
+									</>
 								)}
 							</tbody>
 						</table>
@@ -1140,10 +1342,10 @@ export default function WeeklyPlanner() {
 					<div className="flex rounded-lg border overflow-hidden text-xs font-medium">
 						{(
 							[
-								{ value: null,       label: "Shift",    activeClass: "bg-primary text-primary-foreground" },
-								{ value: "sick",     label: "Sick",     activeClass: "bg-rose-500 text-white" },
+								{ value: null, label: "Shift", activeClass: "bg-primary text-primary-foreground" },
+								{ value: "sick", label: "Sick", activeClass: "bg-rose-500 text-white" },
 								{ value: "vacation", label: "Vacation", activeClass: "bg-blue-500 text-white" },
-								{ value: "recup",    label: "Recup",    activeClass: "bg-amber-500 text-white" },
+								{ value: "recup", label: "Recup", activeClass: "bg-amber-500 text-white" },
 							] as Array<{ value: AbsenceType | null; label: string; activeClass: string }>
 						).map(({ value, label, activeClass }) => (
 							<button
@@ -1250,10 +1452,7 @@ export default function WeeklyPlanner() {
 
 							{/* Break checkbox */}
 							<label className="flex items-center gap-2.5 cursor-pointer select-none">
-								<Checkbox
-									checked={hasBreak}
-									onCheckedChange={(v) => setHasBreak(v === true)}
-								/>
+								<Checkbox checked={hasBreak} onCheckedChange={(v) => setHasBreak(v === true)} />
 								<span className="text-sm">30 min break</span>
 								{shiftHours(shiftStart, shiftEnd) >= 6 && !hasBreak && (
 									<span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
@@ -1272,9 +1471,7 @@ export default function WeeklyPlanner() {
 										<p className="text-xs text-muted-foreground">
 											<span className="font-semibold text-foreground">{fmt(net)}</span>
 											{" worked"}
-											{hasBreak && (
-												<span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>
-											)}
+											{hasBreak && <span className="ml-1 opacity-60">({fmt(gross)} − 30 min)</span>}
 										</p>
 									);
 								})()
@@ -1332,6 +1529,90 @@ export default function WeeklyPlanner() {
 							disabled={isClearing}
 						>
 							{isClearing ? "Clearing…" : "Clear all"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* ── AI Generate dialog ─────────────────────────────────────── */}
+			<Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+				<DialogContent className="max-w-md">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<Sparkles className="h-4 w-4" />
+							AI Generate Planning
+						</DialogTitle>
+						<DialogDescription>
+							Generate a schedule proposal for <strong>{currentWeek}</strong> based on employee
+							availability. You can review and edit before saving.
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="space-y-3 pt-1">
+						<div className="rounded-lg border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground space-y-1">
+							<p>
+								<strong>{users.filter((u) => u.role === "fix").length}</strong> fix employees
+							</p>
+							<p>
+								<strong>{weekAvails.length}</strong> students with availability
+							</p>
+							<p>
+								<strong>{stores.length}</strong> stores
+							</p>
+						</div>
+
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Additional instructions (optional)</label>
+							<textarea
+								value={aiNote}
+								onChange={(e) => setAiNote(e.target.value)}
+								placeholder="e.g. We need 2 people at Grand-Place on Saturday, avoid scheduling Paul and Marie together..."
+								className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+								rows={4}
+							/>
+						</div>
+					</div>
+
+					{weekShifts.length > 0 && !isGenerating && (
+						<p className="text-xs text-amber-600 dark:text-amber-400">
+							This will replace the current {weekShifts.length} shift
+							{weekShifts.length !== 1 ? "s" : ""} for this week.
+						</p>
+					)}
+
+					{isGenerating && aiStep && (
+						<div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+							<RefreshCw className="h-4 w-4 animate-spin text-primary shrink-0" />
+							<div className="min-w-0">
+								<p className="text-sm font-medium text-foreground animate-pulse">{aiStep}</p>
+								<p className="text-[11px] text-muted-foreground mt-0.5">
+									This may take a few seconds
+								</p>
+							</div>
+						</div>
+					)}
+
+					<DialogFooter>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => setAiDialogOpen(false)}
+							disabled={isGenerating}
+						>
+							Cancel
+						</Button>
+						<Button size="sm" onClick={handleGenerate} disabled={isGenerating}>
+							{isGenerating ? (
+								<>
+									<RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+									Generating\u2026
+								</>
+							) : (
+								<>
+									<Sparkles className="h-3.5 w-3.5 mr-1.5" />
+									Generate
+								</>
+							)}
 						</Button>
 					</DialogFooter>
 				</DialogContent>
