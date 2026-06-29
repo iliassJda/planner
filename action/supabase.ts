@@ -271,6 +271,16 @@ async function clearShifts(shifts: Shift[]) {
 }
 
 async function updateAvailability(availability: Availability) {
+	const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+
+	// Fetch old availability to compute diff
+	const { data: oldRows } = await supabaseAdmin
+		.from("Availability")
+		.select("*")
+		.eq("week_id", availability.week_id)
+		.eq("email", availability.email)
+		.maybeSingle();
+
 	const { data, error } = await supabaseAdmin
 		.from("Availability")
 		.update(availability)
@@ -281,6 +291,33 @@ async function updateAvailability(availability: Availability) {
 	if (error) {
 		console.error("Error updating availability:", error);
 		return null;
+	}
+
+	// Build change list and insert notification
+	if (oldRows) {
+		const old = oldRows as Availability;
+		const changes: { field: string; from: string; to: string }[] = [];
+
+		for (const day of DAY_KEYS) {
+			if (old[day] !== availability[day]) {
+				changes.push({ field: day, from: old[day], to: availability[day] });
+			}
+		}
+		if (old.hours !== availability.hours) {
+			changes.push({ field: "hours", from: String(old.hours), to: String(availability.hours) });
+		}
+		if ((old.comment || "") !== (availability.comment || "")) {
+			changes.push({ field: "comment", from: old.comment || "", to: availability.comment || "" });
+		}
+
+		if (changes.length > 0) {
+			await supabaseAdmin.from("notifications").insert({
+				email: availability.email,
+				week_id: availability.week_id,
+				week_number: availability.week_number,
+				changes,
+			});
+		}
 	}
 
 	return data as Availability[];
@@ -519,6 +556,42 @@ async function changeNickname(email: string, newNickname: string) {
 	return data as User[];
 }
 
+export type Notification = {
+	id: number;
+	email: string;
+	week_id: string;
+	week_number: number;
+	changes: { field: string; from: string; to: string }[];
+	is_read: boolean;
+	created_at: string;
+};
+
+async function getNotifications() {
+	const { data, error } = await supabaseAdmin
+		.from("notifications")
+		.select("*")
+		.order("created_at", { ascending: false })
+		.limit(50);
+
+	if (error) {
+		console.error("Error fetching notifications:", error);
+		return [];
+	}
+
+	return data as Notification[];
+}
+
+async function markNotificationsRead(ids: number[]) {
+	const { error } = await supabaseAdmin
+		.from("notifications")
+		.update({ is_read: true })
+		.in("id", ids);
+
+	if (error) {
+		console.error("Error marking notifications read:", error);
+	}
+}
+
 export {
 	getAllowData,
 	getTotalStudents,
@@ -545,6 +618,8 @@ export {
 	changeNickname,
 	createEmployee,
 	getStoresForApp,
+	getNotifications,
+	markNotificationsRead,
 	assignUserStore,
 	getPlanningPageData,
 };

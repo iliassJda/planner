@@ -17,6 +17,7 @@ import React from "react";
 
 import { getAllowData } from "@/action/supabase";
 import Restricted from "@/components/access-restricted";
+import NotificationBell from "@/components/notification-bell";
 
 export default async function RootLayout({
 	children,
@@ -61,7 +62,10 @@ export default async function RootLayout({
 							<SidebarTrigger />
 							<Separator orientation="vertical" className="mr-2 h-4" />
 						</div>
-						<ToggleButton />
+						<div className="flex items-center gap-1 px-3">
+							<NotificationBell />
+							<ToggleButton />
+						</div>
 					</header>
 					<div className="flex flex-1 flex-col gap-4 p-4">{children}</div>
 				</SidebarInset>
