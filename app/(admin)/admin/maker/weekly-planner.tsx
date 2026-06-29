@@ -93,6 +93,7 @@ export type EmployeeRow = {
 	user: User;
 	days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
 	targetHours: number | null;
+	hasAvailability?: boolean;
 };
 
 
@@ -215,6 +216,8 @@ export default function WeeklyPlanner() {
 		return idx === -1 ? STORE_GROUP_ORDER.length : idx;
 	};
 
+	const emailsWithAvailability = new Set(weekAvails.map((a) => a.email));
+
 	const employeeRows: EmployeeRow[] = [
 		// Fix employees grouped by store in defined order, then alphabetically within group
 		...users
@@ -225,7 +228,7 @@ export default function WeeklyPlanner() {
 				if (pa !== pb) return pa - pb;
 				return (a.nickname || a.first_name).localeCompare(b.nickname || b.first_name);
 			})
-			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null })),
+			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null, hasAvailability: true })),
 
 		// Students with availability for this week
 		...weekAvails
@@ -241,12 +244,20 @@ export default function WeeklyPlanner() {
 						week_id: a.week_id,
 					};
 				});
-				return { user: u, days, targetHours: a.hours };
+				return { user: u, days, targetHours: a.hours, hasAvailability: true };
 			})
 			.filter((x): x is EmployeeRow => x !== null)
 			.sort((a, b) =>
 				(a.user.nickname || a.user.first_name).localeCompare(b.user.nickname || b.user.first_name),
 			),
+
+		// Students who did NOT submit availability
+		...users
+			.filter((u) => u.role !== "fix" && u.role !== "admin" && !emailsWithAvailability.has(u.email))
+			.sort((a, b) =>
+				(a.nickname || a.first_name).localeCompare(b.nickname || b.first_name),
+			)
+			.map((u) => ({ user: u, days: {} as EmployeeRow["days"], targetHours: null, hasAvailability: false })),
 	];
 
 	const weekShifts = assignedShifts.filter((s) => weekDayKeys.includes(s.shift_date));
@@ -688,6 +699,7 @@ export default function WeeklyPlanner() {
 														"group border-b transition-colors hover:bg-muted/10",
 														rowBg,
 														entry.user.role === "fix" && "border-l-2 border-l-purple-400/50",
+														entry.hasAvailability === false && "opacity-50",
 													)}
 												>
 													{/* Employee name */}
@@ -725,6 +737,11 @@ export default function WeeklyPlanner() {
 																			? `0 / ${fmt(target)}`
 																			: "No target"}
 																</p>
+																{entry.hasAvailability === false && (
+																	<span className="text-[8px] font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-400 mt-0.5">
+																		No availability
+																	</span>
+																)}
 															</div>
 														</div>
 													</td>
