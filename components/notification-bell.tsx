@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,14 +63,11 @@ export default function NotificationBell() {
 	const [open, setOpen] = useState(false);
 	const supabaseRef = useRef(createClient());
 
-	const fetchNotifications = useCallback(async () => {
-		const data = await getNotifications();
-		setNotifications(data);
+	useEffect(() => {
+		getNotifications().then(setNotifications);
 	}, []);
 
 	useEffect(() => {
-		fetchNotifications();
-
 		const channel = supabaseRef.current
 			.channel("notifications-realtime")
 			.on(
@@ -86,7 +83,7 @@ export default function NotificationBell() {
 		return () => {
 			supabaseRef.current.removeChannel(channel);
 		};
-	}, [fetchNotifications]);
+	}, []);
 
 	const unreadCount = notifications.filter((n) => !n.is_read).length;
 
