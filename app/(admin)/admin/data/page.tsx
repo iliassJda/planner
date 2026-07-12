@@ -320,6 +320,7 @@ export default function DataPage() {
 			{
 				user: User;
 				days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
+				hasAvailability: boolean;
 			}
 		>();
 
@@ -331,6 +332,7 @@ export default function DataPage() {
 					studentMap.set(entry.user.email, {
 						user: entry.user,
 						days: {},
+						hasAvailability: true,
 					});
 				}
 				const student = studentMap.get(entry.user.email);
@@ -342,6 +344,17 @@ export default function DataPage() {
 					};
 				}
 			});
+		});
+
+		// Add students who did not submit any availability for this week
+		users.forEach((u) => {
+			if (!studentMap.has(u.email)) {
+				studentMap.set(u.email, {
+					user: u,
+					days: {},
+					hasAvailability: false,
+				});
+			}
 		});
 
 		return { weekDays, weekStudents: Array.from(studentMap.values()) };
@@ -620,13 +633,17 @@ export default function DataPage() {
 						{(() => {
 							let { weekStudents } = getWeeklyAvailability(currentWeekStart);
 							const weekDays = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(currentWeekStart, i));
-							// Apply sorting based on sortBy state
+							// Apply sorting based on sortBy state — students without availability always go last
 							if (sortBy === "name") {
-								weekStudents = [...weekStudents].sort((a, b) =>
-									a.user.first_name.localeCompare(b.user.first_name),
-								);
+								weekStudents = [...weekStudents].sort((a, b) => {
+									if (a.hasAvailability !== b.hasAvailability)
+										return a.hasAvailability ? -1 : 1;
+									return a.user.first_name.localeCompare(b.user.first_name);
+								});
 							} else if (sortBy === "hours") {
 								weekStudents = [...weekStudents].sort((a, b) => {
+									if (a.hasAvailability !== b.hasAvailability)
+										return a.hasAvailability ? -1 : 1;
 									// Get hours for each student (from the first available day)
 									const aFirstDay = weekDays.find((d) => a.days[format(d, "yyyy-MM-dd")]);
 									const bFirstDay = weekDays.find((d) => b.days[format(d, "yyyy-MM-dd")]);
@@ -688,7 +705,13 @@ export default function DataPage() {
 										<tbody>
 											{weekStudents.length > 0 ? (
 												weekStudents.map((entry) => (
-													<tr key={entry.user.email} className="hover:bg-muted/50">
+													<tr
+														key={entry.user.email}
+														className={cn(
+															"hover:bg-muted/50",
+															!entry.hasAvailability && "opacity-50",
+														)}
+													>
 														<td className="sticky left-0 border-b border-r bg-card p-2 sm:p-3 z-10">
 															<div className="flex items-center gap-1.5 sm:gap-2">
 																<Avatar className="h-7 w-7 sm:h-9 sm:w-9 flex-shrink-0">
@@ -705,26 +728,32 @@ export default function DataPage() {
 																	<p className="text-xs sm:text-sm font-medium truncate">
 																		{entry.user.first_name}
 																	</p>
-																	{(() => {
-																		const firstDay = weekDays.find(
-																			(d) => entry.days[format(d, "yyyy-MM-dd")],
-																		);
-																		const firstDayData = firstDay
-																			? entry.days[format(firstDay, "yyyy-MM-dd")]
-																			: undefined;
-																		const weekId = firstDayData?.week_id;
-																		const comment = weekId && comments[entry.user.email]?.[weekId];
-																		const hours = firstDayData?.hours;
-																		return (
-																			<div className="max-w-40 w-36 min-w-0">
-																				<p className="text-[9px] sm:text-xs text-muted-foreground break-words">
-																					{comment}
-																					{comment && hours != null && hours > 0 && " • "}
-																					{hours != null && hours > 0 && `${hours}h`}
-																				</p>
-																			</div>
-																		);
-																	})()}
+																	{entry.hasAvailability ? (
+																		(() => {
+																			const firstDay = weekDays.find(
+																				(d) => entry.days[format(d, "yyyy-MM-dd")],
+																			);
+																			const firstDayData = firstDay
+																				? entry.days[format(firstDay, "yyyy-MM-dd")]
+																				: undefined;
+																			const weekId = firstDayData?.week_id;
+																			const comment = weekId && comments[entry.user.email]?.[weekId];
+																			const hours = firstDayData?.hours;
+																			return (
+																				<div className="max-w-40 w-36 min-w-0">
+																					<p className="text-[9px] sm:text-xs text-muted-foreground break-words">
+																						{comment}
+																						{comment && hours != null && hours > 0 && " • "}
+																						{hours != null && hours > 0 && `${hours}h`}
+																					</p>
+																				</div>
+																			);
+																		})()
+																	) : (
+																		<p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-400">
+																			No availability
+																		</p>
+																	)}
 																</div>
 															</div>
 														</td>
@@ -739,7 +768,7 @@ export default function DataPage() {
 																		className="border-b border-r p-1 sm:p-2 text-center h-16 sm:h-20 w-20 sm:w-28 flex-shrink-0"
 																	>
 																		<span className="text-[9px] sm:text-xs text-muted-foreground">
-																			N/A
+																			{entry.hasAvailability ? "N/A" : "—"}
 																		</span>
 																	</td>
 																);
@@ -770,11 +799,6 @@ export default function DataPage() {
 																		>
 																			{style.short}
 																		</span>
-																		{/* {dayData.hours > 0 && (
-																			<span className="text-[8px] sm:text-xs text-muted-foreground">
-																				{dayData.hours}h
-																			</span>
-																		)} */}
 																	</div>
 																</td>
 															);
