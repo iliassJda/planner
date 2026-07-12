@@ -1632,7 +1632,7 @@ const totalStoreHours = (storeId: number) =>
 							{isGenerating ? (
 								<>
 									<RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-									Generating\u2026
+									Generating
 								</>
 							) : (
 								<>
