@@ -312,11 +312,7 @@ export default function WeeklyPlanner() {
 		shiftsFor(email)
 			.filter((s) => s.store_id === storeId)
 			.reduce((sum, s) => sum + s.hours, 0);
-	const staffOnDay = (dayKey: string) =>
-		new Set(
-			weekShifts.filter((s) => s.shift_date === dayKey && !s.absence_type).map((s) => s.email),
-		).size;
-	const totalStoreHours = (storeId: number) =>
+const totalStoreHours = (storeId: number) =>
 		weekShifts.filter((s) => s.store_id === storeId).reduce((sum, s) => sum + s.hours, 0);
 
 	const fixEmails = new Set(users.filter((u) => u.role === "fix").map((u) => u.email));
@@ -738,7 +734,7 @@ export default function WeeklyPlanner() {
 						<span className="text-xs text-muted-foreground">{employeeRows.length} employees</span>
 					</div>
 
-					<div className="overflow-x-auto">
+					<div className="overflow-auto max-h-[calc(100vh-260px)]">
 						<table className="w-full border-collapse text-xs min-w-[900px]">
 							{/* ── Column group widths ── */}
 							<colgroup>
@@ -756,14 +752,14 @@ export default function WeeklyPlanner() {
 							<thead>
 								<tr className="border-b bg-muted/20">
 									{/* Employee header */}
-									<th className="sticky left-0 z-20 bg-muted/20 text-left px-3 py-2.5 font-semibold text-[10px] uppercase tracking-widest text-muted-foreground border-r">
+									<th className="sticky left-0 top-0 z-40 bg-card text-left px-3 py-2.5 font-semibold text-[10px] uppercase tracking-widest text-muted-foreground border-r">
 										Employee
 									</th>
 									{/* Day headers */}
 									{weekDays.map((day) => (
 										<th
 											key={day.toISOString()}
-											className="px-2 py-2.5 text-center font-semibold border-r"
+											className="sticky top-0 z-20 bg-muted/20 px-2 py-2.5 text-center font-semibold border-r"
 										>
 											<div className="text-foreground text-[11px]">
 												{format(day, "EEE").toUpperCase()}
@@ -779,13 +775,13 @@ export default function WeeklyPlanner() {
 										return (
 											<th
 												key={store.id}
-												className="px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-muted-foreground"
+												className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-muted-foreground"
 												title={store.name}
 											>
 												<div className="flex flex-col items-center gap-1">
 													{colorMode && color && (
 														<span
-															className="h-3.5 w-3.5 rounded-full block flex-shrink-0"
+															className="h-3.5 w-3.5 rounded-full block shrink-0"
 															style={{
 																backgroundColor: color.bg,
 																border: `2px solid ${color.text}`,
@@ -800,11 +796,11 @@ export default function WeeklyPlanner() {
 										);
 									})}
 									{/* ABSENT */}
-									<th className="px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+									<th className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
 										Absent
 									</th>
 									{/* TOTAL */}
-									<th className="px-1 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide text-muted-foreground">
+									<th className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide text-muted-foreground">
 										Total
 									</th>
 								</tr>
@@ -843,11 +839,7 @@ export default function WeeklyPlanner() {
 												>
 													{/* Employee name */}
 													<td
-														className={cn(
-															"sticky left-0 z-10 border-r px-3 py-2 transition-colors",
-															rowBg,
-															"group-hover:bg-muted/10",
-														)}
+														className="sticky left-0 z-20 bg-card border-r px-3 py-2"
 													>
 														<div className="flex items-center gap-2">
 															<Avatar className="h-7 w-7 shrink-0 border">
@@ -1040,7 +1032,7 @@ export default function WeeklyPlanner() {
 
 										{/* Summary row */}
 										{/* <tr className="border-t-2 border-border/60 bg-muted/20 font-semibold">
-											<td className="sticky left-0 z-10 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground border-r">
+											<td className="sticky left-0 z-20 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground border-r">
 												Staff / Total
 											</td>
 											{weekDays.map((day) => {
@@ -1103,7 +1095,7 @@ export default function WeeklyPlanner() {
 
 										{/* STAFF PER DAY header */}
 										<tr className="bg-muted/10 border-b">
-											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+											<td className="sticky left-0 z-20 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
 												Staff per Day
 											</td>
 											<td colSpan={7 + stores.length + 2} />
@@ -1116,7 +1108,7 @@ export default function WeeklyPlanner() {
 											return (
 												<tr key={`spd-${store.id}`} className="border-b">
 													<td
-														className="sticky left-0 z-10 px-3 py-1 border-r text-[10px] font-semibold"
+														className="sticky left-0 z-20 px-3 py-1 border-r text-[10px] font-semibold"
 														style={
 															color && !isOther
 																? { backgroundColor: color.bg, color: color.text }
@@ -1164,7 +1156,7 @@ export default function WeeklyPlanner() {
 
 										{/* HOURS PER WEEK sub-header */}
 										<tr className="bg-muted/10 border-b">
-											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
+											<td className="sticky left-0 z-20 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-r">
 												Hours per Week
 											</td>
 											{weekDayKeys.map((key) => (
@@ -1191,7 +1183,7 @@ export default function WeeklyPlanner() {
 
 										{/* NEUHAUS row */}
 										<tr className="border-b">
-											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+											<td className="sticky left-0 z-20 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
 												Neuhaus
 											</td>
 											{weekDayKeys.map((key) => (
@@ -1224,7 +1216,7 @@ export default function WeeklyPlanner() {
 
 										{/* INTERIM row */}
 										<tr className="border-b">
-											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
+											<td className="sticky left-0 z-20 bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-r">
 												Interim
 											</td>
 											{weekDayKeys.map((key) => (
@@ -1257,7 +1249,7 @@ export default function WeeklyPlanner() {
 
 										{/* TOTAL WORKED row */}
 										<tr className="border-b bg-muted/10 font-semibold">
-											<td className="sticky left-0 z-10 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground border-r">
+											<td className="sticky left-0 z-20 bg-muted/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-foreground border-r">
 												Total Worked
 											</td>
 											{weekDayKeys.map((key) => (
@@ -1290,7 +1282,7 @@ export default function WeeklyPlanner() {
 
 										{/* ABSENT row */}
 										<tr className="border-b">
-											<td className="sticky left-0 z-10 bg-card px-3 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border-r">
+											<td className="sticky left-0 z-20 bg-card px-3 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border-r">
 												Absent
 											</td>
 											{weekDayKeys.map((key) => (
