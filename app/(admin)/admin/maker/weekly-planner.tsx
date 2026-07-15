@@ -802,11 +802,11 @@ export default function WeeklyPlanner() {
 										);
 									})}
 									{/* ABSENT */}
-									<th className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+									<th className="sticky top-0 z-20 bg-card px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
 										Absent
 									</th>
 									{/* TOTAL */}
-									<th className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide text-muted-foreground">
+									<th className="sticky top-0 z-20 bg-card px-1 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide text-muted-foreground">
 										Total
 									</th>
 								</tr>
