@@ -313,7 +313,7 @@ export default function WeeklyPlanner() {
 		shiftsFor(email)
 			.filter((s) => s.store_id === storeId)
 			.reduce((sum, s) => sum + s.hours, 0);
-const totalStoreHours = (storeId: number) =>
+	const totalStoreHours = (storeId: number) =>
 		weekShifts.filter((s) => s.store_id === storeId).reduce((sum, s) => sum + s.hours, 0);
 
 	const fixEmails = new Set(users.filter((u) => u.role === "fix").map((u) => u.email));
@@ -765,7 +765,7 @@ const totalStoreHours = (storeId: number) =>
 									{weekDays.map((day) => (
 										<th
 											key={day.toISOString()}
-											className="sticky top-0 z-20 bg-muted/20 px-2 py-2.5 text-center font-semibold border-r"
+											className="sticky top-0 z-20 bg-card px-2 py-2.5 text-center font-semibold border-r"
 										>
 											<div className="text-foreground text-[11px]">
 												{format(day, "EEE").toUpperCase()}
@@ -781,7 +781,7 @@ const totalStoreHours = (storeId: number) =>
 										return (
 											<th
 												key={store.id}
-												className="sticky top-0 z-20 bg-muted/20 px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-muted-foreground"
+												className="sticky top-0 z-20 bg-card px-1 py-2.5 text-center font-semibold border-r text-[10px] uppercase tracking-wide text-muted-foreground"
 												title={store.name}
 											>
 												<div className="flex flex-col items-center gap-1">
@@ -844,9 +844,7 @@ const totalStoreHours = (storeId: number) =>
 													)}
 												>
 													{/* Employee name */}
-													<td
-														className="sticky left-0 z-20 bg-card border-r px-3 py-2"
-													>
+													<td className="sticky left-0 z-20 bg-card border-r px-3 py-2">
 														<div className="flex items-center gap-2">
 															<Avatar className="h-7 w-7 shrink-0 border">
 																<AvatarImage
