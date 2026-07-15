@@ -3,6 +3,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Store, Shift } from "@/types";
 
+type TimetableEntry = {
+	day_of_week: number; // 0 = Mon, 6 = Sun
+	start_time: string;
+	end_time: string;
+	store_id: number | null; // null = use the employee's default store
+};
+
+type FixUser = {
+	email: string;
+	name: string;
+	store_id: number | null;
+	contract_hours: number | null;
+	timetable: TimetableEntry[];
+};
+
 type GeneratedShift = {
 	email: string;
 	shift_date: string;
@@ -16,13 +31,17 @@ const SYSTEM_PROMPT = `You are a staff scheduling assistant for Neuhaus chocolat
 
 Your job is to generate a weekly shift schedule. You will receive:
 - A list of stores with their IDs
-- A list of fix (permanent) employees with their assigned store
+- A list of fix (permanent) employees, each with a personal timetable (days, times, store)
 - A list of student employees with their availability for each day and desired hours
 - The 7 date keys (Mon–Sun) for the week
 - An optional note from the manager with extra constraints
 
 Rules:
-1. Fix employees work at their assigned store every day (Mon–Sun), typically 09:00–17:00 (8h, including 30min break = 7.5h net). You can adjust if the manager's note says otherwise.
+1. Fix employees must follow their personal timetable exactly:
+   - Only schedule them on the days listed in their timetable.
+   - Use the start/end times from their timetable entry for that day.
+   - If a timetable entry has a store_id, use that store for that day; otherwise use their default store.
+   - If a fix employee has no timetable, schedule them every day (Mon–Sun) at their default store, 09:00–17:00.
 2. Students should ONLY be scheduled on days they are available (morning, afternoon, or whole_day). Never schedule a student on a day marked "not_available".
 3. Respect each student's desired hours as closely as possible — don't go over.
 4. Morning availability → schedule roughly 09:00–14:00. Afternoon → 14:00–19:00. Whole day → 09:00–17:00 or similar.
@@ -41,6 +60,28 @@ Return a JSON array of shift objects. Each object must have exactly these fields
 
 Return ONLY the JSON array, no markdown, no explanation.`;
 
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function formatFixUser(u: FixUser, weekDayKeys: string[]): string {
+	const contractStr = u.contract_hours != null ? ` — contract: ${u.contract_hours}h/week` : "";
+	const header = `- ${u.name} (${u.email}), default store_id: ${u.store_id ?? "none"}${contractStr}`;
+
+	if (u.timetable.length === 0) {
+		return `${header}\n  No timetable set — schedule every day at default store, 09:00–17:00`;
+	}
+
+	const entries = u.timetable
+		.map((t) => {
+			const date = weekDayKeys[t.day_of_week];
+			const day = DAY_NAMES[t.day_of_week];
+			const storeStr = t.store_id != null ? `store_id ${t.store_id}` : "default store";
+			return `  ${date} (${day}): ${t.start_time}–${t.end_time} at ${storeStr}`;
+		})
+		.join("\n");
+
+	return `${header}\n${entries}`;
+}
+
 export async function generatePlanning({
 	stores,
 	fixUsers,
@@ -49,7 +90,7 @@ export async function generatePlanning({
 	managerNote,
 }: {
 	stores: Store[];
-	fixUsers: { email: string; name: string; store_id: number | null }[];
+	fixUsers: FixUser[];
 	studentAvailabilities: {
 		email: string;
 		name: string;
@@ -71,8 +112,8 @@ export async function generatePlanning({
 STORES:
 ${stores.map((s) => `- ${s.name} (id: ${s.id})`).join("\n")}
 
-FIX EMPLOYEES (permanent staff):
-${fixUsers.map((u) => `- ${u.name} (${u.email}) — assigned store_id: ${u.store_id ?? "none"}`).join("\n")}
+FIX EMPLOYEES (permanent staff — follow timetable exactly):
+${fixUsers.map((u) => formatFixUser(u, weekDayKeys)).join("\n")}
 
 STUDENTS WITH AVAILABILITY:
 ${studentAvailabilities

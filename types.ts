@@ -1,3 +1,10 @@
+type TimetableEntry = {
+	day_of_week: number; // 0 = Mon, 6 = Sun
+	start_time: string;
+	end_time: string;
+	store_id?: number | null;
+};
+
 type User = {
 	first_name: string;
 	nickname: string;
@@ -8,6 +15,7 @@ type User = {
 	region: Region;
 	allowed?: boolean;
 	store_id?: number | null;
+	contract_hours?: number | null;
 };
 
 type RoleName = "admin" | "student" | "fix";
@@ -84,4 +92,5 @@ export type {
 	ShiftAssignment,
 	Shift,
 	AbsenceType,
+	TimetableEntry,
 };

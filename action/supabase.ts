@@ -114,7 +114,7 @@ async function getAllowData(user: User) {
 async function getAllUsers() {
 	const { data, error } = await supabaseAdmin
 		.from("User")
-		.select("email, first_name, nickname, image, allowed, role_name, store_id");
+		.select("email, first_name, nickname, image, allowed, role_name, store_id, contract_hours");
 
 	if (error) {
 		console.error("Error fetching users:", error);
@@ -130,6 +130,7 @@ async function getAllUsers() {
 		allowed: user.allowed,
 		role: user.role_name,
 		store_id: user.store_id ?? null,
+		contract_hours: user.contract_hours ?? null,
 	})) as User[];
 }
 
@@ -592,6 +593,84 @@ async function markNotificationsRead(ids: number[]) {
 	}
 }
 
+async function getTimetable(email: string) {
+	const { data, error } = await supabaseAdmin
+		.from("timetable")
+		.select("day_of_week, start_time, end_time, store_id")
+		.eq("user_email", email)
+		.order("day_of_week");
+
+	if (error) {
+		console.error("Error fetching timetable:", error);
+		return [];
+	}
+	return data;
+}
+
+async function getTimetablesForUsers(emails: string[]): Promise<Record<string, { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]>> {
+	if (emails.length === 0) return {};
+	const { data, error } = await supabaseAdmin
+		.from("timetable")
+		.select("user_email, day_of_week, start_time, end_time, store_id")
+		.in("user_email", emails)
+		.order("day_of_week");
+
+	if (error) {
+		console.error("Error fetching timetables:", error);
+		return {};
+	}
+
+	const result: Record<string, { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]> = {};
+	for (const row of data) {
+		if (!result[row.user_email]) result[row.user_email] = [];
+		result[row.user_email].push({
+			day_of_week: row.day_of_week,
+			start_time: row.start_time,
+			end_time: row.end_time,
+			store_id: row.store_id ?? null,
+		});
+	}
+	return result;
+}
+
+async function saveTimetable(
+	email: string,
+	contractHours: number | null,
+	entries: { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[],
+) {
+	const { error: deleteError } = await supabaseAdmin
+		.from("timetable")
+		.delete()
+		.eq("user_email", email);
+
+	if (deleteError) {
+		console.error("Error clearing timetable:", deleteError);
+		return false;
+	}
+
+	if (entries.length > 0) {
+		const { error: insertError } = await supabaseAdmin.from("timetable").insert(
+			entries.map((e) => ({ ...e, user_email: email })),
+		);
+		if (insertError) {
+			console.error("Error inserting timetable:", insertError);
+			return false;
+		}
+	}
+
+	const { error: userError } = await supabaseAdmin
+		.from("User")
+		.update({ contract_hours: contractHours })
+		.eq("email", email);
+
+	if (userError) {
+		console.error("Error updating contract hours:", userError);
+		return false;
+	}
+
+	return true;
+}
+
 export {
 	getAllowData,
 	getTotalStudents,
@@ -622,6 +701,9 @@ export {
 	markNotificationsRead,
 	assignUserStore,
 	getPlanningPageData,
+	getTimetable,
+	saveTimetable,
+	getTimetablesForUsers,
 };
 
 async function getPlanningPageData(weekLabel?: string) {

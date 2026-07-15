@@ -37,6 +37,7 @@ import {
 	insertShift,
 	getAllShifts,
 	clearShifts,
+	getTimetablesForUsers,
 } from "@/action/supabase";
 import { addDays, format } from "date-fns";
 import {
@@ -522,12 +523,17 @@ const totalStoreHours = (storeId: number) =>
 		}, 3000);
 
 		try {
+			const fixEmails = users.filter((u) => u.role === "fix").map((u) => u.email);
+			const timetables = await getTimetablesForUsers(fixEmails);
+
 			const fixUsersData = users
 				.filter((u) => u.role === "fix")
 				.map((u) => ({
 					email: u.email,
 					name: u.nickname || u.first_name,
 					store_id: u.store_id ?? null,
+					contract_hours: u.contract_hours ?? null,
+					timetable: timetables[u.email] ?? [],
 				}));
 
 			const studentAvailabilities = weekAvails

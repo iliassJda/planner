@@ -33,9 +33,12 @@ import {
 	Pencil,
 	UserPlus,
 	Store,
+	Clock3,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RoleName, Store as StoreType, User } from "@/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -51,7 +54,10 @@ import {
 	createEmployee,
 	getStoresForApp,
 	assignUserStore,
+	getTimetable,
+	saveTimetable,
 } from "@/action/supabase";
+import { TimetableEntry } from "@/types";
 import UserSkeleton from "@/components/user-skeleton";
 
 import { getInitials } from "@/help_functions";
@@ -64,17 +70,12 @@ function getOptions(
 	setConfirmAction: Dispatch<
 		SetStateAction<{
 			user: User;
-			action:
-				| "accept"
-				| "reject"
-				| "makeAdmin"
-				| "removeAdmin"
-				| "makeFix"
-				| "removeFix";
+			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
 		} | null>
 	>,
 	menuType: MenuAction,
 	setAssigningStore: Dispatch<SetStateAction<{ user: User; storeId: string } | null>>,
+	setAssigningTimetable: Dispatch<SetStateAction<User | null>>,
 ) {
 	return (
 		<DropdownMenu>
@@ -100,6 +101,10 @@ function getOptions(
 						<DropdownMenuItem onClick={() => setAssigningStore({ user, storeId: "" })}>
 							<Store className="mr-2 h-4 w-4 text-green-600 dark:text-green-400" />
 							<span>Assign Store</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => setAssigningTimetable(user)}>
+							<Clock3 className="mr-2 h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+							<span>Assign Time Table</span>
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={() => setConfirmAction({ user, action: "makeAdmin" })}>
@@ -145,17 +150,12 @@ function makeUser(
 	setConfirmAction: Dispatch<
 		SetStateAction<{
 			user: User;
-			action:
-				| "accept"
-				| "reject"
-				| "makeAdmin"
-				| "removeAdmin"
-				| "makeFix"
-				| "removeFix";
+			action: "accept" | "reject" | "makeAdmin" | "removeAdmin" | "makeFix" | "removeFix";
 		} | null>
 	>,
 	setEditingUser: Dispatch<SetStateAction<{ user: User; nickname: string } | null>>,
 	setAssigningStore: Dispatch<SetStateAction<{ user: User; storeId: string } | null>>,
+	setAssigningTimetable: Dispatch<SetStateAction<User | null>>,
 	stores: StoreType[],
 ) {
 	const assignedStore =
@@ -196,7 +196,7 @@ function makeUser(
 				</div>
 			</div>
 			<div className="flex items-center gap-2 shrink-0">
-				{getOptions(user, updatingUser, setConfirmAction, menuType, setAssigningStore)}
+				{getOptions(user, updatingUser, setConfirmAction, menuType, setAssigningStore, setAssigningTimetable)}
 			</div>
 		</div>
 	);
@@ -229,6 +229,10 @@ export default function AllUsersPage() {
 		null,
 	);
 	const [stores, setStores] = useState<StoreType[]>([]);
+
+	const [assigningTimetable, setAssigningTimetable] = useState<User | null>(null);
+	const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
+	const [timetableContractHours, setTimetableContractHours] = useState<string>("");
 
 	const fetchUsers = async () => {
 		const userData = await getAllUsers();
@@ -350,6 +354,54 @@ export default function AllUsersPage() {
 			case "removeFix":
 				await handleUpdateUserPermissions(user.email, "student");
 				break;
+		}
+	};
+
+	useEffect(() => {
+		if (!assigningTimetable) return;
+		getTimetable(assigningTimetable.email).then((rows) => {
+			setTimetableEntries(
+				rows.map((r) => ({
+					day_of_week: r.day_of_week,
+					start_time: r.start_time,
+					end_time: r.end_time,
+					store_id: r.store_id ?? null,
+				})),
+			);
+			setTimetableContractHours(
+				assigningTimetable.contract_hours != null
+					? String(assigningTimetable.contract_hours)
+					: "",
+			);
+		});
+	}, [assigningTimetable]);
+
+	const handleSaveTimetable = async () => {
+		if (!assigningTimetable) return;
+		const contractHours = timetableContractHours ? Number(timetableContractHours) : null;
+		setAssigningTimetable(null);
+		setUpdatingUser(assigningTimetable.email);
+		try {
+			const ok = await saveTimetable(
+				assigningTimetable.email,
+				contractHours,
+				timetableEntries.map((e) => ({
+					day_of_week: e.day_of_week,
+					start_time: e.start_time,
+					end_time: e.end_time,
+					store_id: e.store_id ?? null,
+				})),
+			);
+			if (ok) {
+				toast.success("Timetable saved");
+				await fetchUsers();
+			} else {
+				toast.error("Failed to save timetable");
+			}
+		} catch {
+			toast.error("Failed to save timetable");
+		} finally {
+			setUpdatingUser(null);
 		}
 	};
 
@@ -561,7 +613,16 @@ export default function AllUsersPage() {
 							<p className="text-sm text-muted-foreground">No administrators found</p>
 						) : (
 							adminUsers.map((user) =>
-								makeUser(user, updatingUser, "admin", setConfirmAction, setEditingUser, setAssigningStore, stores),
+								makeUser(
+									user,
+									updatingUser,
+									"admin",
+									setConfirmAction,
+									setEditingUser,
+									setAssigningStore,
+									setAssigningTimetable,
+									stores,
+								),
 							)
 						)}
 					</CardContent>
@@ -592,7 +653,16 @@ export default function AllUsersPage() {
 							<p className="text-sm text-muted-foreground">No fixers found</p>
 						) : (
 							fixUsers.map((user) =>
-								makeUser(user, updatingUser, "fix", setConfirmAction, setEditingUser, setAssigningStore, stores),
+								makeUser(
+									user,
+									updatingUser,
+									"fix",
+									setConfirmAction,
+									setEditingUser,
+									setAssigningStore,
+									setAssigningTimetable,
+									stores,
+								),
 							)
 						)}
 					</CardContent>
@@ -612,7 +682,16 @@ export default function AllUsersPage() {
 							<p className="text-sm text-muted-foreground">No regular users found</p>
 						) : (
 							regularUsers.map((user) =>
-								makeUser(user, updatingUser, "student", setConfirmAction, setEditingUser, setAssigningStore, stores),
+								makeUser(
+									user,
+									updatingUser,
+									"student",
+									setConfirmAction,
+									setEditingUser,
+									setAssigningStore,
+									setAssigningTimetable,
+									stores,
+								),
 							)
 						)}
 					</CardContent>
@@ -759,8 +838,170 @@ export default function AllUsersPage() {
 						<Button variant="outline" onClick={() => setAssigningStore(null)}>
 							Cancel
 						</Button>
-						<Button onClick={handleAssignStore} disabled={!assigningStore?.storeId || !!updatingUser}>
+						<Button
+							onClick={handleAssignStore}
+							disabled={!assigningStore?.storeId || !!updatingUser}
+						>
 							{updatingUser ? "Processing..." : "Assign"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Timetable Dialog */}
+			<Dialog
+				open={!!assigningTimetable}
+				onOpenChange={(open) => {
+					if (!open) setAssigningTimetable(null);
+				}}
+			>
+				<DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+					<DialogHeader>
+						<DialogTitle>Assign Time Table</DialogTitle>
+						<DialogDescription>
+							Set the weekly schedule for{" "}
+							<strong>
+								{assigningTimetable?.nickname || assigningTimetable?.first_name}
+							</strong>
+							.
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="overflow-y-auto flex-1 space-y-4 pr-1">
+						{/* Contract hours */}
+						<div className="space-y-1.5">
+							<Label className="text-sm font-medium">Contract hours / week</Label>
+							<Input
+								type="number"
+								min={0}
+								max={60}
+								step={0.5}
+								placeholder="e.g. 38"
+								value={timetableContractHours}
+								onChange={(e) => setTimetableContractHours(e.target.value)}
+							/>
+						</div>
+
+						{/* Day rows */}
+						<div className="space-y-2">
+							<Label className="text-sm font-medium">Working days</Label>
+							{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(
+								(dayName, idx) => {
+									const entry = timetableEntries.find((e) => e.day_of_week === idx);
+									const checked = !!entry;
+									return (
+										<div key={idx} className="rounded-lg border p-3 space-y-2">
+											<div className="flex items-center gap-2">
+												<Checkbox
+													id={`day-${idx}`}
+													checked={checked}
+													onCheckedChange={(val) => {
+														if (val) {
+															setTimetableEntries((prev) => [
+																...prev,
+																{
+																	day_of_week: idx,
+																	start_time: "09:00",
+																	end_time: "17:00",
+																	store_id: assigningTimetable?.store_id ?? null,
+																},
+															]);
+														} else {
+															setTimetableEntries((prev) =>
+																prev.filter((e) => e.day_of_week !== idx),
+															);
+														}
+													}}
+												/>
+												<label
+													htmlFor={`day-${idx}`}
+													className="text-sm font-medium cursor-pointer"
+												>
+													{dayName}
+												</label>
+											</div>
+											{checked && entry && (
+												<div className="grid grid-cols-2 gap-2 pl-6">
+													<div className="space-y-1">
+														<Label className="text-xs text-muted-foreground">Start</Label>
+														<Input
+															type="time"
+															value={entry.start_time}
+															onChange={(e) =>
+																setTimetableEntries((prev) =>
+																	prev.map((en) =>
+																		en.day_of_week === idx
+																			? { ...en, start_time: e.target.value }
+																			: en,
+																	),
+																)
+															}
+														/>
+													</div>
+													<div className="space-y-1">
+														<Label className="text-xs text-muted-foreground">End</Label>
+														<Input
+															type="time"
+															value={entry.end_time}
+															onChange={(e) =>
+																setTimetableEntries((prev) =>
+																	prev.map((en) =>
+																		en.day_of_week === idx
+																			? { ...en, end_time: e.target.value }
+																			: en,
+																	),
+																)
+															}
+														/>
+													</div>
+													<div className="col-span-2 space-y-1">
+														<Label className="text-xs text-muted-foreground">
+															Store override (optional)
+														</Label>
+														<Select
+															value={entry.store_id != null ? String(entry.store_id) : "__default__"}
+															onValueChange={(val) =>
+																setTimetableEntries((prev) =>
+																	prev.map((en) =>
+																		en.day_of_week === idx
+																			? {
+																					...en,
+																					store_id:
+																						val === "__default__" ? null : Number(val),
+																				}
+																			: en,
+																	),
+																)
+															}
+														>
+															<SelectTrigger>
+																<SelectValue placeholder="Default store" />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="__default__">Default store</SelectItem>
+																{stores.map((s) => (
+																	<SelectItem key={s.id} value={String(s.id)}>
+																		{s.name}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+												</div>
+											)}
+										</div>
+									);
+								},
+							)}
+						</div>
+					</div>
+
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setAssigningTimetable(null)}>
+							Cancel
+						</Button>
+						<Button onClick={handleSaveTimetable} disabled={!!updatingUser}>
+							{updatingUser ? "Saving..." : "Save"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>
