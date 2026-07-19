@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// @ts-expect-error -- Next.js supports global CSS side-effect imports in app layouts
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/provider/theme-provider";
@@ -18,6 +19,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
 	title: "Student Planner",
 	description: "Student planner for Neuhaus",
+	manifest: "/manifest.webmanifest",
+	appleWebApp: {
+		capable: true,
+		title: "Neuhaus Planner",
+		statusBarStyle: "black-translucent",
+	},
+	icons: {
+		icon: [
+			{ url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+			{ url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+		],
+		apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+	},
 };
 
 export default async function RootLayout({
