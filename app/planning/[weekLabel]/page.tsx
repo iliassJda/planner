@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, LayoutDashboard } from "lucide-react";
 import type { Shift, Store } from "@/types";
 import { cn } from "@/lib/utils";
+import IcalSubscribeButton from "@/components/ical-subscribe-button";
 
 // ── Store colours ─────────────────────────────────────────────────────────────
 const STORE_COLOURS = [
@@ -128,6 +129,7 @@ export default async function PlanningPage({
 
 					{/* Week navigation */}
 					<div className="flex items-center gap-2 shrink-0">
+						{currentUserEmail && <IcalSubscribeButton email={currentUserEmail} />}
 						<Link
 							href={prevWeek ? `/planning/${encodeURIComponent(prevWeek.week_label)}` : "#"}
 							aria-disabled={!prevWeek}

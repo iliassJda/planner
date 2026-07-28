@@ -2,6 +2,7 @@
 
 import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
+import { format, subWeeks } from "date-fns";
 
 const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
 
@@ -15,87 +16,87 @@ const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
 // }
 
 function isRoleName(value: unknown): value is RoleName {
-	return typeof value === "string" && ROLE_NAMES.includes(value as RoleName);
+  return typeof value === "string" && ROLE_NAMES.includes(value as RoleName);
 }
 
 async function exportAvailability() {
-	const { data, error } = await supabaseAdmin.from("Availability").select("*");
+  const { data, error } = await supabaseAdmin.from("Availability").select("*");
 
-	if (error) {
-		console.error("Error fetching availability:", error);
-		return [];
-	}
+  if (error) {
+    console.error("Error fetching availability:", error);
+    return [];
+  }
 
-	return data as Availability[];
+  return data as Availability[];
 }
 
 async function deactivateWeek(weekId: string) {
-	// First set is_active to false for the week
-	const { data: updatedWeek, error: weekError } = await supabaseAdmin
-		.from("Week")
-		.update({ is_active: false })
-		.eq("id", weekId)
-		.select();
+  // First set is_active to false for the week
+  const { data: updatedWeek, error: weekError } = await supabaseAdmin
+    .from("Week")
+    .update({ is_active: false })
+    .eq("id", weekId)
+    .select();
 
-	if (weekError) {
-		console.error("Error deactivating week:", weekError);
-		return null;
-	}
+  if (weekError) {
+    console.error("Error deactivating week:", weekError);
+    return null;
+  }
 
-	return updatedWeek as Week[];
+  return updatedWeek as Week[];
 }
 
 async function activateWeek(weekId: string) {
-	// First set is_active to true for the week
-	const { data: updatedWeek, error: weekError } = await supabaseAdmin
-		.from("Week")
-		.update({ is_active: true })
-		.eq("id", weekId)
-		.select();
+  // First set is_active to true for the week
+  const { data: updatedWeek, error: weekError } = await supabaseAdmin
+    .from("Week")
+    .update({ is_active: true })
+    .eq("id", weekId)
+    .select();
 
-	if (weekError) {
-		console.error("Error activating week:", weekError);
-		return null;
-	}
+  if (weekError) {
+    console.error("Error activating week:", weekError);
+    return null;
+  }
 
-	return updatedWeek as Week[];
+  return updatedWeek as Week[];
 }
 
 async function getAllowData(user: User) {
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		// .select("email, allowed, admin")
-		.select("email, allowed, role_name")
-		.eq("email", user.email)
-		.eq("allowed", true)
-		.maybeSingle(); // <-- IMPORTANT
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    // .select("email, allowed, admin")
+    .select("email, allowed, role_name")
+    .eq("email", user.email)
+    .eq("allowed", true)
+    .maybeSingle(); // <-- IMPORTANT
 
-	if (error) {
-		console.error(error);
-		return null;
-	}
+  if (error) {
+    console.error(error);
+    return null;
+  }
 
-	// console.log("This is the data: ", data);
+  // console.log("This is the data: ", data);
 
-	if (!data) {
-		return null;
-	}
+  if (!data) {
+    return null;
+  }
 
-	const roleName = data.role_name;
+  const roleName = data.role_name;
 
-	// return data; // returns: { email: string, allowed: boolean } | null
-	// const rawRole = Array.isArray(data.roles)
-	//   ? data.roles[0]?.name
-	//   : (data.roles as { name?: string } | null)?.name;
+  // return data; // returns: { email: string, allowed: boolean } | null
+  // const rawRole = Array.isArray(data.roles)
+  //   ? data.roles[0]?.name
+  //   : (data.roles as { name?: string } | null)?.name;
 
-	if (!isRoleName(roleName)) {
-		return null;
-	}
+  if (!isRoleName(roleName)) {
+    return null;
+  }
 
-	return {
-		email: data.email,
-		role: roleName,
-	};
+  return {
+    email: data.email,
+    role: roleName,
+  };
 }
 
 // async function getAllUsers() {
@@ -112,673 +113,736 @@ async function getAllowData(user: User) {
 // }
 
 async function getAllUsers() {
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.select("email, first_name, nickname, image, allowed, role_name, store_id, contract_hours");
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .select("email, first_name, nickname, image, allowed, role_name, store_id, contract_hours");
 
-	if (error) {
-		console.error("Error fetching users:", error);
-		return [];
-	}
-	// console.log("Fetched users:", data);
+  if (error) {
+    console.error("Error fetching users:", error);
+    return [];
+  }
+  // console.log("Fetched users:", data);
 
-	return data.map((user) => ({
-		email: user.email,
-		first_name: user.first_name,
-		nickname: user.nickname,
-		image: user.image,
-		allowed: user.allowed,
-		role: user.role_name,
-		store_id: user.store_id ?? null,
-		contract_hours: user.contract_hours ?? null,
-	})) as User[];
+  return data.map((user) => ({
+    email: user.email,
+    first_name: user.first_name,
+    nickname: user.nickname,
+    image: user.image,
+    allowed: user.allowed,
+    role: user.role_name,
+    store_id: user.store_id ?? null,
+    contract_hours: user.contract_hours ?? null,
+  })) as User[];
 }
 
 async function getTotalStudents() {
-	// const { roleData, roleError } = await getRoleId("user");
+  // const { roleData, roleError } = await getRoleId("user");
 
-	// if (roleError) {
-	//   console.error("Error fetching role id:", roleError);
-	//   return 0;
-	// }
+  // if (roleError) {
+  //   console.error("Error fetching role id:", roleError);
+  //   return 0;
+  // }
 
-	const { count, error } = await supabaseAdmin
-		.from("User")
-		.select("email", { count: "exact", head: true })
-		.eq("allowed", true)
-		.eq("role_name", "student");
+  const { count, error } = await supabaseAdmin
+    .from("User")
+    .select("email", { count: "exact", head: true })
+    .eq("allowed", true)
+    .eq("role_name", "student");
 
-	if (error) {
-		console.error("Error fetching total students:", error);
-		return 0;
-	}
+  if (error) {
+    console.error("Error fetching total students:", error);
+    return 0;
+  }
 
-	return count || 0;
+  return count || 0;
 }
 
 async function getAllWeeks() {
-	const { data, error } = await supabaseAdmin
-		.from("Week")
-		.select("*")
-		.order("year", { ascending: false })
-		.order("week_number", { ascending: false });
+  const { data, error } = await supabaseAdmin
+    .from("Week")
+    .select("*")
+    .order("year", { ascending: false })
+    .order("week_number", { ascending: false });
 
-	if (error) {
-		console.error("Error fetching weeks:", error);
-		return [];
-	}
+  if (error) {
+    console.error("Error fetching weeks:", error);
+    return [];
+  }
 
-	return data as Week[];
+  return data as Week[];
 }
 
 async function insertWeeks(weeks: Omit<Week, "is_active">[]) {
-	const weeksToInsert = weeks.map((week) => ({
-		id: week.id,
-		week_number: week.week_number,
-		year: week.year,
-		week_label: week.week_label,
-		is_active: true,
-	}));
+  const weeksToInsert = weeks.map((week) => ({
+    id: week.id,
+    week_number: week.week_number,
+    year: week.year,
+    week_label: week.week_label,
+    is_active: true,
+  }));
 
-	const { data, error } = await supabaseAdmin.from("Week").insert(weeksToInsert).select();
+  const { data, error } = await supabaseAdmin.from("Week").insert(weeksToInsert).select();
 
-	if (error) {
-		console.error("Error inserting weeks:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error inserting weeks:", error);
+    return null;
+  }
 
-	return data as Week[];
+  return data as Week[];
 }
 
 // Upsert version - inserts or updates if already exists
 async function upsertWeeks(weeks: Omit<Week, "is_active">[]) {
-	const weeksToUpsert = weeks.map((week) => ({
-		id: week.id,
-		week_number: week.week_number,
-		year: week.year,
-		week_label: week.week_label,
-		is_active: true,
-	}));
+  const weeksToUpsert = weeks.map((week) => ({
+    id: week.id,
+    week_number: week.week_number,
+    year: week.year,
+    week_label: week.week_label,
+    is_active: true,
+  }));
 
-	const { data, error } = await supabaseAdmin
-		.from("Week")
-		.upsert(weeksToUpsert, { onConflict: "id" })
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("Week")
+    .upsert(weeksToUpsert, { onConflict: "id" })
+    .select();
 
-	if (error) {
-		console.error("Error upserting weeks:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error upserting weeks:", error);
+    return null;
+  }
 
-	return data as Week[];
+  return data as Week[];
 }
 
 async function insertAvailability(availability: Availability) {
-	const { data, error } = await supabaseAdmin.from("Availability").insert(availability).select();
+  const { data, error } = await supabaseAdmin.from("Availability").insert(availability).select();
 
-	if (error) {
-		console.error("Error inserting availability:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error inserting availability:", error);
+    return null;
+  }
 
-	// console.log("Inserted availability:", data);
-	return data as Availability[];
+  // console.log("Inserted availability:", data);
+  return data as Availability[];
 }
 
 function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignment>>) {
-	const result = [];
+  const result = [];
 
-	for (const [email, dates] of Object.entries(shifts)) {
-		for (const [date, shift] of Object.entries(dates)) {
-			result.push({
-				email: email,
-				shift_date: date,
-				store_id: shift.storeId,
-				start_time: shift.start,
-				end_time: shift.end,
-				hours: shift.hours,
-				custom_store_name: shift.customStoreName ?? null,
-				absence_type: shift.absenceType ?? null,
-			} as Shift);
-		}
-	}
+  for (const [email, dates] of Object.entries(shifts)) {
+    for (const [date, shift] of Object.entries(dates)) {
+      result.push({
+        email: email,
+        shift_date: date,
+        store_id: shift.storeId,
+        start_time: shift.start,
+        end_time: shift.end,
+        hours: shift.hours,
+        custom_store_name: shift.customStoreName ?? null,
+        absence_type: shift.absenceType ?? null,
+      } as Shift);
+    }
+  }
 
-	return result;
+  return result;
 }
 
 async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
-	const result = fromRecordToShifts(shifts);
-	const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
+  const result = fromRecordToShifts(shifts);
+  const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
 
-	if (error) throw new Error(error.message);
+  if (error) throw new Error(error.message);
 
-	return data;
+  return data;
 }
 
 async function getAllShifts() {
-	const { data, error } = await supabaseAdmin.from("shifts").select("*");
+  const { data, error } = await supabaseAdmin.from("shifts").select("*");
 
-	if (error) throw new Error(error.message);
+  if (error) throw new Error(error.message);
 
-	return data as Shift[];
+  return data as Shift[];
 }
 
 async function clearShifts(shifts: Shift[]) {
-	const shiftIds = shifts.map((s) => s.id);
+  const shiftIds = shifts.map((s) => s.id);
 
-	const { error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
+  const { error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
 
-	if (error) throw new Error(error.message);
+  if (error) throw new Error(error.message);
 }
 
 async function updateAvailability(availability: Availability) {
-	const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+  const DAY_KEYS = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+  ] as const;
 
-	// Fetch old availability to compute diff
-	const { data: oldRows } = await supabaseAdmin
-		.from("Availability")
-		.select("*")
-		.eq("week_id", availability.week_id)
-		.eq("email", availability.email)
-		.maybeSingle();
+  // Fetch old availability to compute diff
+  const { data: oldRows } = await supabaseAdmin
+    .from("Availability")
+    .select("*")
+    .eq("week_id", availability.week_id)
+    .eq("email", availability.email)
+    .maybeSingle();
 
-	const { data, error } = await supabaseAdmin
-		.from("Availability")
-		.update(availability)
-		.eq("week_id", availability.week_id)
-		.eq("email", availability.email)
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("Availability")
+    .update(availability)
+    .eq("week_id", availability.week_id)
+    .eq("email", availability.email)
+    .select();
 
-	if (error) {
-		console.error("Error updating availability:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error updating availability:", error);
+    return null;
+  }
 
-	// Build change list and insert notification
-	if (oldRows) {
-		const old = oldRows as Availability;
-		const changes: { field: string; from: string; to: string }[] = [];
+  // Build change list and insert notification
+  if (oldRows) {
+    const old = oldRows as Availability;
+    const changes: { field: string; from: string; to: string }[] = [];
 
-		for (const day of DAY_KEYS) {
-			if (old[day] !== availability[day]) {
-				changes.push({ field: day, from: old[day], to: availability[day] });
-			}
-		}
-		if (old.hours !== availability.hours) {
-			changes.push({ field: "hours", from: String(old.hours), to: String(availability.hours) });
-		}
-		if ((old.comment || "") !== (availability.comment || "")) {
-			changes.push({ field: "comment", from: old.comment || "", to: availability.comment || "" });
-		}
+    for (const day of DAY_KEYS) {
+      if (old[day] !== availability[day]) {
+        changes.push({ field: day, from: old[day], to: availability[day] });
+      }
+    }
+    if (old.hours !== availability.hours) {
+      changes.push({ field: "hours", from: String(old.hours), to: String(availability.hours) });
+    }
+    if ((old.comment || "") !== (availability.comment || "")) {
+      changes.push({ field: "comment", from: old.comment || "", to: availability.comment || "" });
+    }
 
-		if (changes.length > 0) {
-			await supabaseAdmin.from("notifications").insert({
-				email: availability.email,
-				week_id: availability.week_id,
-				week_number: availability.week_number,
-				changes,
-			});
-		}
-	}
+    if (changes.length > 0) {
+      await supabaseAdmin.from("notifications").insert({
+        email: availability.email,
+        week_id: availability.week_id,
+        week_number: availability.week_number,
+        changes,
+      });
+    }
+  }
 
-	return data as Availability[];
+  return data as Availability[];
 }
 
 async function getAvailabilityByEmail(email: string) {
-	const { data, error } = await supabaseAdmin.from("Availability").select("*").eq("email", email);
+  const { data, error } = await supabaseAdmin.from("Availability").select("*").eq("email", email);
 
-	if (error) {
-		console.error("Error fetching availability by email:", error);
-		return [];
-	}
-	// console.log("Fetched availability for email:", email, data);
-	return data as Availability[];
+  if (error) {
+    console.error("Error fetching availability by email:", error);
+    return [];
+  }
+  // console.log("Fetched availability for email:", email, data);
+  return data as Availability[];
 }
 
 async function deleteWeek(weekId: string) {
-	// First delete all availability records for this week
-	const { error: availabilityError } = await supabaseAdmin
-		.from("Availability")
-		.delete()
-		.eq("week_id", weekId);
+  // First delete all availability records for this week
+  const { error: availabilityError } = await supabaseAdmin
+    .from("Availability")
+    .delete()
+    .eq("week_id", weekId);
 
-	if (availabilityError) {
-		console.error("Error deleting availability records:", availabilityError);
-		return null;
-	}
+  if (availabilityError) {
+    console.error("Error deleting availability records:", availabilityError);
+    return null;
+  }
 
-	// Then delete the week itself
-	const { data, error } = await supabaseAdmin.from("Week").delete().eq("id", weekId).select();
+  // Then delete the week itself
+  const { data, error } = await supabaseAdmin.from("Week").delete().eq("id", weekId).select();
 
-	if (error) {
-		console.error("Error deleting week:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error deleting week:", error);
+    return null;
+  }
 
-	return data as Week[];
+  return data as Week[];
 }
 
 async function updateUserPermissions(email: string, role: RoleName) {
-	// console.log("This is the current role: ", role);
+  // console.log("This is the current role: ", role);
 
-	// const { roleData, roleError } = await getRoleId(role);
+  // const { roleData, roleError } = await getRoleId(role);
 
-	// if (roleError || !roleData) {
-	//   console.error("Error fetching role:", roleError);
-	//   return null;
-	// }
+  // if (roleError || !roleData) {
+  //   console.error("Error fetching role:", roleError);
+  //   return null;
+  // }
 
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.update({ role_name: role })
-		.eq("email", email)
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .update({ role_name: role })
+    .eq("email", email)
+    .select();
 
-	if (error) {
-		console.error("Error updating user permissions:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error updating user permissions:", error);
+    return null;
+  }
 
-	return data as User[];
+  return data as User[];
 }
 
 async function updateUserStatus(email: string, allowed: boolean) {
-	const { data: userData } = await supabaseAdmin.from("User").select("allowed").eq("email", email);
+  const { data: userData } = await supabaseAdmin.from("User").select("allowed").eq("email", email);
 
-	// console.log("this is the data -> ", userData);
+  // console.log("this is the data -> ", userData);
 
-	if (!userData) return null;
+  if (!userData) return null;
 
-	const value = userData[0].allowed;
+  const value = userData[0].allowed;
 
-	const { data, error } = allowed
-		? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
-		: value
-			? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
-			: await supabaseAdmin.from("User").delete().eq("email", email).select();
-	// const { data, error } = allowed
-	// 	? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
-	// 	: await supabaseAdmin.from("User").delete().eq("email", email).select();
+  const { data, error } = allowed
+    ? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+    : value
+      ? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+      : await supabaseAdmin.from("User").delete().eq("email", email).select();
+  // const { data, error } = allowed
+  // 	? await supabaseAdmin.from("User").update({ allowed }).eq("email", email).select()
+  // 	: await supabaseAdmin.from("User").delete().eq("email", email).select();
 
-	if (error) {
-		console.error("Error updating user status:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error updating user status:", error);
+    return null;
+  }
 
-	return data as User[];
+  return data as User[];
 
-	// return data as User[];
-	// if (allowed) {
-	// 	const { data, error } = await supabaseAdmin
-	// 		.from("User")
-	// 		.update({ allowed })
-	// 		.eq("email", email)
-	// 		.select();
-	// 	if (error) {
-	// 		console.error("Error updating user status:", error);
-	// 		return null;
-	// 	}
+  // return data as User[];
+  // if (allowed) {
+  // 	const { data, error } = await supabaseAdmin
+  // 		.from("User")
+  // 		.update({ allowed })
+  // 		.eq("email", email)
+  // 		.select();
+  // 	if (error) {
+  // 		console.error("Error updating user status:", error);
+  // 		return null;
+  // 	}
 
-	// 	return data as User[];
-	// } else {
-	// 	const { data, error } = await supabaseAdmin.from("User").delete().eq("email", email).select();
+  // 	return data as User[];
+  // } else {
+  // 	const { data, error } = await supabaseAdmin.from("User").delete().eq("email", email).select();
 
-	// }
+  // }
 }
 
 async function getAllStoresFromRegion(region: string) {
-	const { data, error } = await supabaseAdmin.from("store").select("*").eq("region", region);
+  const { data, error } = await supabaseAdmin.from("store").select("*").eq("region", region);
 
-	if (error) {
-		console.error("Error fetching stores from ", region, " :", error);
-	}
+  if (error) {
+    console.error("Error fetching stores from ", region, " :", error);
+  }
 
-	return data as Store[];
+  return data as Store[];
 }
 
 async function getStoresForApp() {
-	const region = process.env.APP_REGION;
-	if (!region) {
-		console.error("APP_REGION env var is not set");
-		return [];
-	}
-	return getAllStoresFromRegion(region);
+  const region = process.env.APP_REGION;
+  if (!region) {
+    console.error("APP_REGION env var is not set");
+    return [];
+  }
+  return getAllStoresFromRegion(region);
 }
 
 async function assignUserStore(email: string, storeId: number | null) {
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.update({ store_id: storeId })
-		.eq("email", email)
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .update({ store_id: storeId })
+    .eq("email", email)
+    .select();
 
-	if (error) {
-		console.error("Error assigning store to user:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error assigning store to user:", error);
+    return null;
+  }
 
-	return data as User[];
+  return data as User[];
 }
 
 async function getAllAvailability() {
-	const { data, error } = await supabaseAdmin
-		.from("Availability")
-		.select("*")
-		.order("week_number", { ascending: true });
+  const { data, error } = await supabaseAdmin
+    .from("Availability")
+    .select("*")
+    .order("week_number", { ascending: true });
 
-	if (error) {
-		console.error("Error fetching all availability:", error);
-		return [];
-	}
+  if (error) {
+    console.error("Error fetching all availability:", error);
+    return [];
+  }
 
-	return data as Availability[];
+  return data as Availability[];
 }
 
 async function getComments() {
-	const { data, error } = await supabaseAdmin
-		.from("Availability")
-		.select("email, week_id, comment");
+  const { data, error } = await supabaseAdmin
+    .from("Availability")
+    .select("email, week_id, comment");
 
-	if (error) {
-		console.error("Error fetching comments:", error);
-		return [];
-	}
+  if (error) {
+    console.error("Error fetching comments:", error);
+    return [];
+  }
 
-	return data as { email: string; week_id: string; comment: string }[];
+  return data as { email: string; week_id: string; comment: string }[];
 }
 
 async function getCsvAvailabilities(availabilityData: Availability[]) {
-	const headers = [
-		"Email",
-		"Week ID",
-		"Monday",
-		"Tuesday",
-		"Wednesday",
-		"Thursday",
-		"Friday",
-		"Saturday",
-		"Sunday",
-		"Week Number",
-		"Hours Desired",
-		"Comment",
-	];
+  const headers = [
+    "Email",
+    "Week ID",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+    "Week Number",
+    "Hours Desired",
+    "Comment",
+  ];
 
-	const csvContent = [
-		headers.join(","),
-		...availabilityData.map((row) =>
-			[
-				row.email,
-				row.week_id,
-				row.monday,
-				row.tuesday,
-				row.wednesday,
-				row.thursday,
-				row.friday,
-				row.saturday,
-				row.sunday,
-				row.week_number,
-				row.hours,
-				row.comment,
-			].join(","),
-		),
-	].join("\n");
-	return csvContent;
+  const csvContent = [
+    headers.join(","),
+    ...availabilityData.map((row) =>
+      [
+        row.email,
+        row.week_id,
+        row.monday,
+        row.tuesday,
+        row.wednesday,
+        row.thursday,
+        row.friday,
+        row.saturday,
+        row.sunday,
+        row.week_number,
+        row.hours,
+        row.comment,
+      ].join(","),
+    ),
+  ].join("\n");
+  return csvContent;
 }
 
 async function createEmployee(name: string) {
-	const slug = name.trim().toLowerCase().replace(/\s+/g, ".");
-	const email = `${slug}.${Date.now()}@employee.local`;
+  const slug = name.trim().toLowerCase().replace(/\s+/g, ".");
+  const email = `${slug}.${Date.now()}@employee.local`;
 
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.insert({ first_name: name.trim(), email, image: "", allowed: true, role_name: "fix" })
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .insert({ first_name: name.trim(), email, image: "", allowed: true, role_name: "fix" })
+    .select();
 
-	if (error) {
-		console.error("Error creating employee:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error creating employee:", error);
+    return null;
+  }
 
-	return data as User[];
+  return data as User[];
 }
 
 async function changeNickname(email: string, newNickname: string) {
-	const { data, error } = await supabaseAdmin
-		.from("User")
-		.update({ nickname: newNickname })
-		.eq("email", email)
-		.select();
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .update({ nickname: newNickname })
+    .eq("email", email)
+    .select();
 
-	if (error) {
-		console.error("Error updating nickname:", error);
-		return null;
-	}
+  if (error) {
+    console.error("Error updating nickname:", error);
+    return null;
+  }
 
-	return data as User[];
+  return data as User[];
 }
 
 export type Notification = {
-	id: number;
-	email: string;
-	week_id: string;
-	week_number: number;
-	changes: { field: string; from: string; to: string }[];
-	is_read: boolean;
-	created_at: string;
+  id: number;
+  email: string;
+  week_id: string;
+  week_number: number;
+  changes: { field: string; from: string; to: string }[];
+  is_read: boolean;
+  created_at: string;
 };
 
 async function getNotifications() {
-	const { data, error } = await supabaseAdmin
-		.from("notifications")
-		.select("*")
-		.order("created_at", { ascending: false })
-		.limit(50);
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
-	if (error) {
-		console.error("Error fetching notifications:", error);
-		return [];
-	}
+  if (error) {
+    console.error("Error fetching notifications:", error);
+    return [];
+  }
 
-	return data as Notification[];
+  return data as Notification[];
 }
 
 async function markNotificationsRead(ids: number[]) {
-	const { error } = await supabaseAdmin
-		.from("notifications")
-		.update({ is_read: true })
-		.in("id", ids);
+  const { error } = await supabaseAdmin
+    .from("notifications")
+    .update({ is_read: true })
+    .in("id", ids);
 
-	if (error) {
-		console.error("Error marking notifications read:", error);
-	}
+  if (error) {
+    console.error("Error marking notifications read:", error);
+  }
 }
 
 async function getTimetable(email: string) {
-	const { data, error } = await supabaseAdmin
-		.from("timetable")
-		.select("day_of_week, start_time, end_time, store_id")
-		.eq("user_email", email)
-		.order("day_of_week");
+  const { data, error } = await supabaseAdmin
+    .from("timetable")
+    .select("day_of_week, start_time, end_time, store_id")
+    .eq("user_email", email)
+    .order("day_of_week");
 
-	if (error) {
-		console.error("Error fetching timetable:", error);
-		return [];
-	}
-	return data;
+  if (error) {
+    console.error("Error fetching timetable:", error);
+    return [];
+  }
+  return data;
 }
 
-async function getTimetablesForUsers(emails: string[]): Promise<Record<string, { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]>> {
-	if (emails.length === 0) return {};
-	const { data, error } = await supabaseAdmin
-		.from("timetable")
-		.select("user_email, day_of_week, start_time, end_time, store_id")
-		.in("user_email", emails)
-		.order("day_of_week");
+async function getTimetablesForUsers(
+  emails: string[],
+): Promise<
+  Record<
+    string,
+    { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]
+  >
+> {
+  if (emails.length === 0) return {};
+  const { data, error } = await supabaseAdmin
+    .from("timetable")
+    .select("user_email, day_of_week, start_time, end_time, store_id")
+    .in("user_email", emails)
+    .order("day_of_week");
 
-	if (error) {
-		console.error("Error fetching timetables:", error);
-		return {};
-	}
+  if (error) {
+    console.error("Error fetching timetables:", error);
+    return {};
+  }
 
-	const result: Record<string, { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]> = {};
-	for (const row of data) {
-		if (!result[row.user_email]) result[row.user_email] = [];
-		result[row.user_email].push({
-			day_of_week: row.day_of_week,
-			start_time: row.start_time,
-			end_time: row.end_time,
-			store_id: row.store_id ?? null,
-		});
-	}
-	return result;
+  const result: Record<
+    string,
+    { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]
+  > = {};
+  for (const row of data) {
+    if (!result[row.user_email]) result[row.user_email] = [];
+    result[row.user_email].push({
+      day_of_week: row.day_of_week,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      store_id: row.store_id ?? null,
+    });
+  }
+  return result;
 }
 
 async function saveTimetable(
-	email: string,
-	contractHours: number | null,
-	entries: { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[],
+  email: string,
+  contractHours: number | null,
+  entries: { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[],
 ) {
-	const { error: deleteError } = await supabaseAdmin
-		.from("timetable")
-		.delete()
-		.eq("user_email", email);
+  const { error: deleteError } = await supabaseAdmin
+    .from("timetable")
+    .delete()
+    .eq("user_email", email);
 
-	if (deleteError) {
-		console.error("Error clearing timetable:", deleteError);
-		return false;
-	}
+  if (deleteError) {
+    console.error("Error clearing timetable:", deleteError);
+    return false;
+  }
 
-	if (entries.length > 0) {
-		const { error: insertError } = await supabaseAdmin.from("timetable").insert(
-			entries.map((e) => ({ ...e, user_email: email })),
-		);
-		if (insertError) {
-			console.error("Error inserting timetable:", insertError);
-			return false;
-		}
-	}
+  if (entries.length > 0) {
+    const { error: insertError } = await supabaseAdmin
+      .from("timetable")
+      .insert(entries.map((e) => ({ ...e, user_email: email })));
+    if (insertError) {
+      console.error("Error inserting timetable:", insertError);
+      return false;
+    }
+  }
 
-	const { error: userError } = await supabaseAdmin
-		.from("User")
-		.update({ contract_hours: contractHours })
-		.eq("email", email);
+  const { error: userError } = await supabaseAdmin
+    .from("User")
+    .update({ contract_hours: contractHours })
+    .eq("email", email);
 
-	if (userError) {
-		console.error("Error updating contract hours:", userError);
-		return false;
-	}
+  if (userError) {
+    console.error("Error updating contract hours:", userError);
+    return false;
+  }
 
-	return true;
+  return true;
+}
+
+async function getPlanningPageData(weekLabel?: string) {
+  const { getWeekStartDate } = await import("@/help_functions");
+  const { addDays, format } = await import("date-fns");
+
+  // 1. Fetch all weeks for navigation, sorted chronologically
+  const { data: allWeeksData, error: weeksError } = await supabaseAdmin
+    .from("Week")
+    .select("*")
+    .order("year", { ascending: true })
+    .order("week_number", { ascending: true });
+
+  if (weeksError) throw new Error(weeksError.message);
+  const allWeeks: Week[] = (allWeeksData ?? []) as Week[];
+
+  // 2. Find the target week — by label, or fall back to the active week, then latest
+  let week: Week | null = null;
+  if (weekLabel) {
+    week = allWeeks.find((w) => w.week_label === weekLabel) ?? null;
+  }
+  if (!week) {
+    week = allWeeks.find((w) => w.is_active) ?? allWeeks[allWeeks.length - 1] ?? null;
+  }
+  if (!week) return null;
+
+  // 3. Build the 7 date strings for this week
+  const start = getWeekStartDate(week.week_number, week.year);
+  const weekDates = Array.from({ length: 7 }, (_, i) => format(addDays(start, i), "yyyy-MM-dd"));
+
+  // 4. Fetch shifts for those dates
+  const { data: shiftsData, error: shiftsError } = await supabaseAdmin
+    .from("shifts")
+    .select("*")
+    .in("shift_date", weekDates);
+
+  if (shiftsError) throw new Error(shiftsError.message);
+  const shifts: Shift[] = (shiftsData ?? []) as Shift[];
+
+  // 5. Fetch users that appear in those shifts
+  const emails = [...new Set(shifts.map((s) => s.email))];
+  const { data: usersData, error: usersError } =
+    emails.length > 0
+      ? await supabaseAdmin
+          .from("User")
+          .select("email, first_name, nickname, image, role_name, store_id")
+          .in("email", emails)
+      : { data: [], error: null };
+
+  if (usersError) throw new Error(usersError.message);
+  const users: User[] = (usersData ?? []).map((u) => ({
+    email: u.email,
+    first_name: u.first_name,
+    nickname: u.nickname,
+    image: u.image,
+    allowed: true,
+    role: u.role_name,
+    store_id: u.store_id ?? null,
+  })) as User[];
+
+  // 6. Fetch stores
+  const region = process.env.APP_REGION;
+  const storeQuery = region
+    ? supabaseAdmin.from("store").select("*").eq("region", region)
+    : supabaseAdmin.from("store").select("*");
+  const { data: storesData, error: storesError } = await storeQuery;
+  if (storesError) throw new Error(storesError.message);
+  const stores: Store[] = (storesData ?? []) as Store[];
+
+  // 7. Compute prev/next week labels for navigation
+  const currentIdx = allWeeks.findIndex((w) => w.id === week!.id);
+  const prevWeek = currentIdx > 0 ? allWeeks[currentIdx - 1] : null;
+  const nextWeek = currentIdx < allWeeks.length - 1 ? allWeeks[currentIdx + 1] : null;
+
+  return { week, weekDates, shifts, users, stores, prevWeek, nextWeek, allWeeks };
+}
+
+async function getUpcomingShiftsForUser(email: string) {
+  const since = format(subWeeks(new Date(), 2), "yyyy-MM-dd");
+
+  const { data, error } = await supabaseAdmin
+    .from("shifts")
+    .select("*")
+    .eq("email", email)
+    .gte("shift_date", since)
+    .is("absence_type", null); // drop sick/vacation/recup from the feed
+
+  if (error) throw error;
+  return data as Shift[];
+}
+
+async function verifyIcalToken(token: string) {
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .select("email")
+    .eq("ical_token", token)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error verifying ical token:", error);
+    return null;
+  }
+
+  return data?.email ?? null;
+}
+
+async function getIcalToken(email: string) {
+  const { data, error } = await supabaseAdmin
+    .from("User")
+    .select("ical_token")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching ical token:", error);
+    return null;
+  }
+
+  return data?.ical_token ?? null;
 }
 
 export {
-	getAllowData,
-	getTotalStudents,
-	getAllWeeks,
-	insertWeeks,
-	upsertWeeks,
-	insertAvailability,
-	updateAvailability,
-	getAvailabilityByEmail,
-	deleteWeek,
-	getAllUsers,
-	updateUserPermissions,
-	updateUserStatus,
-	getAllAvailability,
-	exportAvailability,
-	getComments,
-	deactivateWeek,
-	activateWeek,
-	getCsvAvailabilities,
-	getAllStoresFromRegion,
-	insertShift,
-	getAllShifts,
-	clearShifts,
-	changeNickname,
-	createEmployee,
-	getStoresForApp,
-	getNotifications,
-	markNotificationsRead,
-	assignUserStore,
-	getPlanningPageData,
-	getTimetable,
-	saveTimetable,
-	getTimetablesForUsers,
+  getAllowData,
+  getTotalStudents,
+  getAllWeeks,
+  insertWeeks,
+  upsertWeeks,
+  insertAvailability,
+  updateAvailability,
+  getAvailabilityByEmail,
+  deleteWeek,
+  getAllUsers,
+  updateUserPermissions,
+  updateUserStatus,
+  getAllAvailability,
+  exportAvailability,
+  getComments,
+  deactivateWeek,
+  activateWeek,
+  getCsvAvailabilities,
+  getAllStoresFromRegion,
+  insertShift,
+  getAllShifts,
+  clearShifts,
+  changeNickname,
+  createEmployee,
+  getStoresForApp,
+  getNotifications,
+  markNotificationsRead,
+  assignUserStore,
+  getPlanningPageData,
+  getTimetable,
+  saveTimetable,
+  getTimetablesForUsers,
+  getUpcomingShiftsForUser,
+  verifyIcalToken,
+  getIcalToken,
 };
-
-async function getPlanningPageData(weekLabel?: string) {
-	const { getWeekStartDate } = await import("@/help_functions");
-	const { addDays, format } = await import("date-fns");
-
-	// 1. Fetch all weeks for navigation, sorted chronologically
-	const { data: allWeeksData, error: weeksError } = await supabaseAdmin
-		.from("Week")
-		.select("*")
-		.order("year", { ascending: true })
-		.order("week_number", { ascending: true });
-
-	if (weeksError) throw new Error(weeksError.message);
-	const allWeeks: Week[] = (allWeeksData ?? []) as Week[];
-
-	// 2. Find the target week — by label, or fall back to the active week, then latest
-	let week: Week | null = null;
-	if (weekLabel) {
-		week = allWeeks.find((w) => w.week_label === weekLabel) ?? null;
-	}
-	if (!week) {
-		week = allWeeks.find((w) => w.is_active) ?? allWeeks[allWeeks.length - 1] ?? null;
-	}
-	if (!week) return null;
-
-	// 3. Build the 7 date strings for this week
-	const start = getWeekStartDate(week.week_number, week.year);
-	const weekDates = Array.from({ length: 7 }, (_, i) =>
-		format(addDays(start, i), "yyyy-MM-dd"),
-	);
-
-	// 4. Fetch shifts for those dates
-	const { data: shiftsData, error: shiftsError } = await supabaseAdmin
-		.from("shifts")
-		.select("*")
-		.in("shift_date", weekDates);
-
-	if (shiftsError) throw new Error(shiftsError.message);
-	const shifts: Shift[] = (shiftsData ?? []) as Shift[];
-
-	// 5. Fetch users that appear in those shifts
-	const emails = [...new Set(shifts.map((s) => s.email))];
-	const { data: usersData, error: usersError } =
-		emails.length > 0
-			? await supabaseAdmin
-					.from("User")
-					.select("email, first_name, nickname, image, role_name, store_id")
-					.in("email", emails)
-			: { data: [], error: null };
-
-	if (usersError) throw new Error(usersError.message);
-	const users: User[] = (usersData ?? []).map((u) => ({
-		email: u.email,
-		first_name: u.first_name,
-		nickname: u.nickname,
-		image: u.image,
-		allowed: true,
-		role: u.role_name,
-		store_id: u.store_id ?? null,
-	})) as User[];
-
-	// 6. Fetch stores
-	const region = process.env.APP_REGION;
-	const storeQuery = region
-		? supabaseAdmin.from("store").select("*").eq("region", region)
-		: supabaseAdmin.from("store").select("*");
-	const { data: storesData, error: storesError } = await storeQuery;
-	if (storesError) throw new Error(storesError.message);
-	const stores: Store[] = (storesData ?? []) as Store[];
-
-	// 7. Compute prev/next week labels for navigation
-	const currentIdx = allWeeks.findIndex((w) => w.id === week!.id);
-	const prevWeek = currentIdx > 0 ? allWeeks[currentIdx - 1] : null;
-	const nextWeek = currentIdx < allWeeks.length - 1 ? allWeeks[currentIdx + 1] : null;
-
-	return { week, weekDates, shifts, users, stores, prevWeek, nextWeek, allWeeks };
-}
