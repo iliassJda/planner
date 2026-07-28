@@ -36,8 +36,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
       "Europe/Brussels",
     );
 
+    // Keyed by (email, date) rather than the row id: the scheduler clears and
+    // re-inserts every shift on each save, so the id changes even when the
+    // shift itself didn't. A stable UID lets calendar apps update the
+    // existing event in place instead of dropping and re-adding it.
     calendar.createEvent({
-      id: `shift-${shift.id}@neuhaus-planner`,
+      id: `${email.replace("@", "_at_")}-${shift.shift_date}@neuhaus-planner`,
       start,
       end,
       summary: storeName,
