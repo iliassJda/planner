@@ -214,7 +214,22 @@ async function upsertWeeks(weeks: Omit<Week, "is_active">[]) {
   return data as Week[];
 }
 
+async function isWeekActive(weekId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("Week")
+    .select("is_active")
+    .eq("id", weekId)
+    .maybeSingle();
+
+  if (error || !data) return false;
+  return data.is_active === true;
+}
+
 async function insertAvailability(availability: Availability) {
+  if (!(await isWeekActive(availability.week_id))) {
+    throw new Error("This week is no longer accepting availability submissions.");
+  }
+
   const { data, error } = await supabaseAdmin.from("Availability").insert(availability).select();
 
   if (error) {
@@ -273,6 +288,10 @@ async function clearShifts(shifts: Shift[]) {
 }
 
 async function updateAvailability(availability: Availability) {
+  if (!(await isWeekActive(availability.week_id))) {
+    throw new Error("This week has been closed and can no longer be edited.");
+  }
+
   const DAY_KEYS = [
     "monday",
     "tuesday",

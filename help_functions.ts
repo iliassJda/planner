@@ -117,7 +117,7 @@ function getAvailabilityForDate(
         const dayAvailability = a[dayKey] as DayAvailability;
         // console.log("dayAvailability: ", dayAvailability);
         const user = users.find((u) => u.email === a.email);
-        // console.log("User = ", user);
+        console.log("User = ", user);
         if (user) {
           // console.log("PUSHHH");
           results.push({

@@ -40,20 +40,19 @@ export default function WeeklyAvailabilityCard({
         user: User;
         days: Record<string, { availability: DayAvailability; hours: number; week_id: string }>;
         hasAvailability: boolean;
-        hasSubmitted: boolean;
       }
     >();
 
     // For each day in the week
     weekDays.forEach((date) => {
       const dayData = getAvailabilityForDate(date, availabilityData, users, weeks);
+      console.log("All data: ", dayData);
       dayData.forEach((entry) => {
         if (!studentMap.has(entry.user.email)) {
           studentMap.set(entry.user.email, {
             user: entry.user,
             days: {},
             hasAvailability: true,
-            hasSubmitted: true,
           });
         }
         const student = studentMap.get(entry.user.email);
@@ -74,7 +73,6 @@ export default function WeeklyAvailabilityCard({
           user: u,
           days: {},
           hasAvailability: false,
-          hasSubmitted: false,
         });
       }
     });

@@ -889,6 +889,7 @@ export default function AllUsersPage() {
 								(dayName, idx) => {
 									const entry = timetableEntries.find((e) => e.day_of_week === idx);
 									const checked = !!entry;
+									const hoursUndecided = checked && !entry.start_time && !entry.end_time;
 									return (
 										<div key={idx} className="rounded-lg border p-3 space-y-2">
 											<div className="flex items-center gap-2">
@@ -922,38 +923,71 @@ export default function AllUsersPage() {
 											</div>
 											{checked && entry && (
 												<div className="grid grid-cols-2 gap-2 pl-6">
-													<div className="space-y-1">
-														<Label className="text-xs text-muted-foreground">Start</Label>
-														<Input
-															type="time"
-															value={entry.start_time}
-															onChange={(e) =>
+													<div className="col-span-2 flex items-center gap-2">
+														<Checkbox
+															id={`day-${idx}-hours-undecided`}
+															checked={hoursUndecided}
+															onCheckedChange={(val) =>
 																setTimetableEntries((prev) =>
 																	prev.map((en) =>
 																		en.day_of_week === idx
-																			? { ...en, start_time: e.target.value }
+																			? {
+																					...en,
+																					start_time: val ? "" : "09:00",
+																					end_time: val ? "" : "17:00",
+																				}
 																			: en,
 																	),
 																)
 															}
 														/>
+														<label
+															htmlFor={`day-${idx}-hours-undecided`}
+															className="text-xs text-muted-foreground cursor-pointer"
+														>
+															Hours not decided yet
+														</label>
 													</div>
-													<div className="space-y-1">
-														<Label className="text-xs text-muted-foreground">End</Label>
-														<Input
-															type="time"
-															value={entry.end_time}
-															onChange={(e) =>
-																setTimetableEntries((prev) =>
-																	prev.map((en) =>
-																		en.day_of_week === idx
-																			? { ...en, end_time: e.target.value }
-																			: en,
-																	),
-																)
-															}
-														/>
-													</div>
+													{hoursUndecided ? (
+														<p className="col-span-2 text-xs text-muted-foreground">
+															Marked as a working day — hours can be set later.
+														</p>
+													) : (
+														<>
+															<div className="space-y-1">
+																<Label className="text-xs text-muted-foreground">Start</Label>
+																<Input
+																	type="time"
+																	value={entry.start_time}
+																	onChange={(e) =>
+																		setTimetableEntries((prev) =>
+																			prev.map((en) =>
+																				en.day_of_week === idx
+																					? { ...en, start_time: e.target.value }
+																					: en,
+																			),
+																		)
+																	}
+																/>
+															</div>
+															<div className="space-y-1">
+																<Label className="text-xs text-muted-foreground">End</Label>
+																<Input
+																	type="time"
+																	value={entry.end_time}
+																	onChange={(e) =>
+																		setTimetableEntries((prev) =>
+																			prev.map((en) =>
+																				en.day_of_week === idx
+																					? { ...en, end_time: e.target.value }
+																					: en,
+																			),
+																		)
+																	}
+																/>
+															</div>
+														</>
+													)}
 													<div className="col-span-2 space-y-1">
 														<Label className="text-xs text-muted-foreground">
 															Store override (optional)
