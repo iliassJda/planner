@@ -34,6 +34,7 @@ import {
 	UserPlus,
 	Store,
 	Clock3,
+	RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RoleName, Store as StoreType, User } from "@/types";
@@ -233,6 +234,7 @@ export default function AllUsersPage() {
 	const [assigningTimetable, setAssigningTimetable] = useState<User | null>(null);
 	const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
 	const [timetableContractHours, setTimetableContractHours] = useState<string>("");
+	const [timetableLoading, setTimetableLoading] = useState(false);
 
 	const fetchUsers = async () => {
 		const userData = await getAllUsers();
@@ -359,6 +361,7 @@ export default function AllUsersPage() {
 
 	useEffect(() => {
 		if (!assigningTimetable) return;
+		setTimetableLoading(true);
 		getTimetable(assigningTimetable.email).then((rows) => {
 			setTimetableEntries(
 				rows.map((r) => ({
@@ -373,6 +376,7 @@ export default function AllUsersPage() {
 					? String(assigningTimetable.contract_hours)
 					: "",
 			);
+			setTimetableLoading(false);
 		});
 	}, [assigningTimetable]);
 
@@ -868,23 +872,30 @@ export default function AllUsersPage() {
 					</DialogHeader>
 
 					<div className="overflow-y-auto flex-1 space-y-4 pr-1">
-						{/* Contract hours */}
-						<div className="space-y-1.5">
-							<Label className="text-sm font-medium">Contract hours / week</Label>
-							<Input
-								type="number"
-								min={0}
-								max={60}
-								step={0.5}
-								placeholder="e.g. 38"
-								value={timetableContractHours}
-								onChange={(e) => setTimetableContractHours(e.target.value)}
-							/>
-						</div>
+						{timetableLoading ? (
+							<div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
+								<RefreshCw className="h-6 w-6 animate-spin text-primary" />
+								<p className="text-sm">Loading timetable…</p>
+							</div>
+						) : (
+							<>
+								{/* Contract hours */}
+								<div className="space-y-1.5">
+									<Label className="text-sm font-medium">Contract hours / week</Label>
+									<Input
+										type="number"
+										min={0}
+										max={60}
+										step={0.5}
+										placeholder="e.g. 38"
+										value={timetableContractHours}
+										onChange={(e) => setTimetableContractHours(e.target.value)}
+									/>
+								</div>
 
-						{/* Day rows */}
-						<div className="space-y-2">
-							<Label className="text-sm font-medium">Working days</Label>
+								{/* Day rows */}
+								<div className="space-y-2">
+									<Label className="text-sm font-medium">Working days</Label>
 							{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(
 								(dayName, idx) => {
 									const entry = timetableEntries.find((e) => e.day_of_week === idx);
@@ -1028,13 +1039,15 @@ export default function AllUsersPage() {
 								},
 							)}
 						</div>
+							</>
+						)}
 					</div>
 
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setAssigningTimetable(null)}>
 							Cancel
 						</Button>
-						<Button onClick={handleSaveTimetable} disabled={!!updatingUser}>
+						<Button onClick={handleSaveTimetable} disabled={!!updatingUser || timetableLoading}>
 							{updatingUser ? "Saving..." : "Save"}
 						</Button>
 					</DialogFooter>
