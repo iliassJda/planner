@@ -255,6 +255,7 @@ function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignmen
         hours: shift.hours,
         custom_store_name: shift.customStoreName ?? null,
         absence_type: shift.absenceType ?? null,
+        absence_hours: shift.absenceHours ?? null,
       } as Shift);
     }
   }
@@ -791,11 +792,12 @@ async function getUpcomingShiftsForUser(email: string) {
     .from("shifts")
     .select("*")
     .eq("email", email)
-    .gte("shift_date", since)
-    .is("absence_type", null); // drop sick/vacation/recup from the feed
+    .gte("shift_date", since);
 
   if (error) throw error;
-  return data as Shift[];
+  // Only emit calendar events for the work portion of a shift; pure absence
+  // rows (no store) never had a work component to put on the calendar.
+  return (data as Shift[]).filter((s) => s.store_id != null);
 }
 
 async function verifyIcalToken(token: string) {

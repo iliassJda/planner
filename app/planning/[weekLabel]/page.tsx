@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { getPlanningPageData } from "@/action/supabase";
 import { format, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
-import { getWeekStartDate } from "@/help_functions";
+import { getWeekStartDate, getShiftWorkedHours, getShiftAbsenceHours } from "@/help_functions";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, LayoutDashboard, Home } from "lucide-react";
 import type { Shift, Store } from "@/types";
@@ -163,9 +163,7 @@ export default async function PlanningPage({ params }: { params: Promise<{ weekL
             const userShifts = shifts.filter(
               (s) => s.email === user.email && weekDates.includes(s.shift_date),
             );
-            const totalHours = userShifts
-              .filter((s) => !s.absence_type)
-              .reduce((sum, s) => sum + s.hours, 0);
+            const totalHours = userShifts.reduce((sum, s) => sum + getShiftWorkedHours(s), 0);
 
             return (
               <div
@@ -229,40 +227,48 @@ export default async function PlanningPage({ params }: { params: Promise<{ weekL
                         <div
                           className="flex-1 flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5"
                           style={
-                            colour && shift && !shift.absence_type
+                            colour && shift && shift.store_id != null
                               ? { backgroundColor: colour.bg }
                               : undefined
                           }
                         >
-                          {shift?.absence_type ? (
-                            <span
-                              className={cn(
-                                "text-[9px] font-bold uppercase px-1 py-0.5 rounded",
-                                ABSENCE_STYLE[shift.absence_type],
-                              )}
-                            >
-                              {ABSENCE_LABEL[shift.absence_type]}
-                            </span>
-                          ) : shift ? (
+                          {shift ? (
                             <>
-                              <span
-                                className="font-mono font-bold text-[10px] leading-none"
-                                style={colour ? { color: colour.text } : undefined}
-                              >
-                                {shift.start_time}
-                              </span>
-                              <span
-                                className="font-mono font-bold text-[10px] leading-none"
-                                style={colour ? { color: colour.text } : undefined}
-                              >
-                                {shift.end_time}
-                              </span>
-                              {storeName && (
+                              {shift.store_id != null && (
+                                <>
+                                  <span
+                                    className="font-mono font-bold text-[10px] leading-none"
+                                    style={colour ? { color: colour.text } : undefined}
+                                  >
+                                    {shift.start_time}
+                                  </span>
+                                  <span
+                                    className="font-mono font-bold text-[10px] leading-none"
+                                    style={colour ? { color: colour.text } : undefined}
+                                  >
+                                    {shift.end_time}
+                                  </span>
+                                  {storeName && (
+                                    <span
+                                      className="text-[8px] leading-none font-medium mt-0.5 truncate max-w-full px-0.5"
+                                      style={colour ? { color: colour.text } : { color: "#64748b" }}
+                                    >
+                                      {storeName}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              {shift.absence_type && (
                                 <span
-                                  className="text-[8px] leading-none font-medium mt-0.5 truncate max-w-full px-0.5"
-                                  style={colour ? { color: colour.text } : { color: "#64748b" }}
+                                  className={cn(
+                                    "text-[9px] font-bold uppercase px-1 py-0.5 rounded",
+                                    shift.store_id != null && "mt-0.5",
+                                    ABSENCE_STYLE[shift.absence_type],
+                                  )}
                                 >
-                                  {storeName}
+                                  {ABSENCE_LABEL[shift.absence_type]}
+                                  {getShiftAbsenceHours(shift) > 0 &&
+                                    ` ${fmt(getShiftAbsenceHours(shift))}`}
                                 </span>
                               )}
                             </>

@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import type ExcelJS from "exceljs";
 import type { Shift, Store } from "@/types";
 import type { EmployeeRow } from "@/app/(admin)/admin/maker/weekly-planner";
+import { getShiftWorkedHours, getShiftAbsenceHours } from "@/help_functions";
 
 type ExportParams = {
 	currentWeek: string;
@@ -133,7 +134,7 @@ export async function exportWeekToExcel({
 		const displayName = entry.user.nickname || entry.user.first_name;
 		const assigned = weekShifts
 			.filter((s) => s.email === entry.user.email && weekDayKeys.includes(s.shift_date))
-			.reduce((sum, s) => sum + s.hours, 0);
+			.reduce((sum, s) => sum + getShiftWorkedHours(s), 0);
 		const target = entry.targetHours;
 		const subText = assigned > 0
 			? `${fmt(assigned)}${target != null ? ` / ${fmt(target)}` : ""}`
@@ -157,32 +158,45 @@ export async function exportWeekToExcel({
 			const avail = entry.days[dayKey]?.availability;
 			const isUnavailable = !avail || avail === "not_available";
 
-			if (shift?.absence_type) {
-				const absenceColors = {
-					sick:     { bg: "#ffe4e6", text: "#be123c" },
-					vacation: { bg: "#dbeafe", text: "#1d4ed8" },
-					recup:    { bg: "#fef3c7", text: "#b45309" },
-				};
-				const ac = absenceColors[shift.absence_type];
-				const label = shift.absence_type === "sick" ? "Sick" : shift.absence_type === "vacation" ? "Vacances" : "Récup";
-				cell.value = label;
-				cell.font = { bold: true, size: 9, color: { argb: argb(ac.text) } };
-				cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(ac.bg) } };
-			} else if (shift) {
-				const store = stores.find((s) => s.id === shift.store_id);
-				const color = store ? getStoreColor(store, stores) : null;
-				const storeName = otherStore && shift.store_id === otherStore.id
-					? shift.custom_store_name || store?.name || ""
-					: store?.name || "";
+			if (shift && (shift.store_id != null || shift.absence_type)) {
+				const richText: { text: string; font?: Partial<ExcelJS.Font> }[] = [];
+				let fillArgb: string | null = null;
 
-				cell.value = {
-					richText: [
+				if (shift.store_id != null) {
+					const store = stores.find((s) => s.id === shift.store_id);
+					const color = store ? getStoreColor(store, stores) : null;
+					const storeName = otherStore && shift.store_id === otherStore.id
+						? shift.custom_store_name || store?.name || ""
+						: store?.name || "";
+
+					richText.push(
 						{ text: `${shift.start_time}–${shift.end_time}\n`, font: { bold: true, size: 10, color: { argb: color ? argb(color.text) : argb("#0f172a") } } },
 						{ text: `${fmt(shift.hours)}  ${storeName}`, font: { size: 8, color: { argb: color ? argb(color.text) : argb("#64748b") } } },
-					],
-				};
-				cell.fill = color
-					? { type: "pattern", pattern: "solid", fgColor: { argb: argb(color.bg) } }
+					);
+					fillArgb = color ? argb(color.bg) : null;
+				}
+
+				if (shift.absence_type) {
+					const absenceColors = {
+						sick:     { bg: "#ffe4e6", text: "#be123c" },
+						vacation: { bg: "#dbeafe", text: "#1d4ed8" },
+						recup:    { bg: "#fef3c7", text: "#b45309" },
+					};
+					const ac = absenceColors[shift.absence_type];
+					const label = shift.absence_type === "sick" ? "Sick" : shift.absence_type === "vacation" ? "Vacances" : "Récup";
+					const absHours = getShiftAbsenceHours(shift);
+
+					if (richText.length > 0) richText.push({ text: "\n" });
+					richText.push({
+						text: absHours > 0 ? `${label} ${fmt(absHours)}` : label,
+						font: { bold: true, size: 9, color: { argb: argb(ac.text) } },
+					});
+					if (shift.store_id == null) fillArgb = argb(ac.bg);
+				}
+
+				cell.value = { richText };
+				cell.fill = fillArgb
+					? { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } }
 					: rowFill;
 			} else if (isUnavailable && !isFix) {
 				cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("#f1f5f9") } };
@@ -292,7 +306,7 @@ export async function exportWeekToExcel({
 	const grandTotalCell = sheet.getCell(summaryRowNum, 2 + dayCount + storeCount + 1);
 	const grandTotal = weekShifts
 		.filter((s) => weekDayKeys.includes(s.shift_date))
-		.reduce((sum, s) => sum + s.hours, 0);
+		.reduce((sum, s) => sum + getShiftWorkedHours(s), 0);
 	grandTotalCell.value = grandTotal > 0 ? fmt(grandTotal) : "";
 	grandTotalCell.font = { bold: true, size: 9 };
 	grandTotalCell.fill = summaryFill;

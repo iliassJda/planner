@@ -67,7 +67,13 @@ import {
 	Shift,
 	AbsenceType,
 } from "@/types";
-import { getInitials, AVAILABILITY_STYLES, getWeekStartDate } from "@/help_functions";
+import {
+	getInitials,
+	AVAILABILITY_STYLES,
+	getWeekStartDate,
+	getShiftWorkedHours,
+	getShiftAbsenceHours,
+} from "@/help_functions";
 import { exportWeekToExcel } from "@/lib/export-excel";
 import { generatePlanning } from "@/action/generate-planning";
 
@@ -129,6 +135,9 @@ export default function WeeklyPlanner() {
 	const [stores, setStores] = useState<Store[]>([]);
 	const [users, setUsers] = useState<User[]>([]);
 	const [assignedShifts, setAssignedShifts] = useState<Shift[]>([]);
+	// Mirrors the last known DB state (unaffected by local, unsaved edits) so a
+	// save/clear can find and delete rows the user removed locally this session.
+	const [dbShifts, setDbShifts] = useState<Shift[]>([]);
 	const [isSaving, setIsSaving] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
 
@@ -140,6 +149,7 @@ export default function WeeklyPlanner() {
 	const [shiftStart, setShiftStart] = useState("09:00");
 	const [shiftEnd, setShiftEnd] = useState("17:00");
 	const [hasBreak, setHasBreak] = useState(false);
+	const [hasWorkShift, setHasWorkShift] = useState(true);
 	const [absenceType, setAbsenceType] = useState<AbsenceType | null>(null);
 	const [absenceHours, setAbsenceHours] = useState(0);
 
@@ -206,6 +216,7 @@ export default function WeeklyPlanner() {
 				setSelectedStoreId((cur) => cur || storeData[0]?.id || 0);
 				setUsers(userData);
 				setAssignedShifts(shifts);
+				setDbShifts(shifts);
 			} finally {
 				setIsLoading(false);
 			}
@@ -299,16 +310,16 @@ export default function WeeklyPlanner() {
 	];
 
 	const weekShifts = assignedShifts.filter((s) => weekDayKeys.includes(s.shift_date));
+	// Whether the DB still holds rows for this week, independent of local (unsaved) edits.
+	const weekHasDbShifts = dbShifts.some((s) => weekDayKeys.includes(s.shift_date) && s.id > 0);
 
 	const shiftsFor = (email: string) => weekShifts.filter((s) => s.email === email);
 	const assignedHours = (email: string) =>
 		shiftsFor(email)
-			.filter((s) => !s.absence_type)
+			.filter((s) => s.store_id != null)
 			.reduce((sum, s) => sum + s.hours, 0);
 	const absenceShiftHours = (email: string) =>
-		shiftsFor(email)
-			.filter((s) => !!s.absence_type)
-			.reduce((sum, s) => sum + s.hours, 0);
+		shiftsFor(email).reduce((sum, s) => sum + getShiftAbsenceHours(s), 0);
 	const storeHours = (email: string, storeId: number) =>
 		shiftsFor(email)
 			.filter((s) => s.store_id === storeId)
@@ -321,7 +332,7 @@ export default function WeeklyPlanner() {
 	const staffAtStoreOnDay = (storeId: number, dayKey: string) =>
 		new Set(
 			weekShifts
-				.filter((s) => s.store_id === storeId && s.shift_date === dayKey && !s.absence_type)
+				.filter((s) => s.store_id === storeId && s.shift_date === dayKey)
 				.map((s) => s.email),
 		).size;
 
@@ -338,19 +349,30 @@ export default function WeeklyPlanner() {
 	const absentHoursAtStore = (storeId: number) => {
 		let total = 0;
 		for (const row of employeeRows) {
-			const absHrs = absenceShiftHours(row.user.email);
-			if (absHrs <= 0) continue;
-			// Attribute to the store where this employee works the most this week,
-			// falling back to their assigned store
+			const absenceRows = shiftsFor(row.user.email).filter((s) => !!s.absence_type);
+			if (absenceRows.length === 0) continue;
+
+			// A combined day (work + absence on the same row) already knows its
+			// store — attribute directly instead of inferring.
+			for (const s of absenceRows) {
+				if (s.store_id === storeId) total += getShiftAbsenceHours(s);
+			}
+
+			// Pure-absence days (no work portion, store_id null) fall back to the
+			// store where this employee works the most this week.
+			const inferredHrs = absenceRows
+				.filter((s) => s.store_id == null)
+				.reduce((sum, s) => sum + getShiftAbsenceHours(s), 0);
+			if (inferredHrs <= 0) continue;
 			const byStore = new Map<number, number>();
 			weekShifts
-				.filter((s) => s.email === row.user.email && !s.absence_type && s.store_id != null)
+				.filter((s) => s.email === row.user.email && s.store_id != null)
 				.forEach((s) => byStore.set(s.store_id!, (byStore.get(s.store_id!) ?? 0) + s.hours));
 			const primaryStoreId =
 				byStore.size > 0
 					? [...byStore.entries()].sort((a, b) => b[1] - a[1])[0][0]
 					: (row.user.store_id ?? null);
-			if (primaryStoreId === storeId) total += absHrs;
+			if (primaryStoreId === storeId) total += inferredHrs;
 		}
 		return total;
 	};
@@ -375,13 +397,14 @@ export default function WeeklyPlanner() {
 		);
 		const start = existing?.start_time ?? "09:00";
 		const end = existing?.end_time ?? "17:00";
+		setHasWorkShift(existing ? existing.store_id != null : true);
 		setAbsenceType(existing?.absence_type ?? null);
-		setAbsenceHours(existing?.absence_type ? (existing.hours ?? 0) : 0);
+		setAbsenceHours(existing ? getShiftAbsenceHours(existing) : 0);
 		setSelectedStoreId(existing?.store_id ?? row.user.store_id ?? stores[0]?.id ?? 0);
 		setShiftStart(start);
 		setShiftEnd(end);
 		// Detect break from stored net hours vs gross hours, or auto-apply rule for new shifts
-		if (existing && !existing.absence_type) {
+		if (existing && existing.store_id != null) {
 			const gross = shiftHours(existing.start_time, existing.end_time);
 			setHasBreak(Math.abs(gross - existing.hours - 0.5) < 0.01);
 		} else {
@@ -399,28 +422,23 @@ export default function WeeklyPlanner() {
 
 	const handleSaveShift = () => {
 		if (!selectedRow || !selectedDay) return;
-		if (!absenceType && (isInvalid || !selectedStoreId)) return;
+		if (hasWorkShift && (isInvalid || !selectedStoreId)) return;
+		if (!hasWorkShift && !absenceType) return;
 		const email = selectedRow.user.email;
 		const dayKey = format(selectedDay, "yyyy-MM-dd");
 
-		const newShiftData = absenceType
-			? {
-					store_id: null,
-					start_time: "",
-					end_time: "",
-					hours: absenceHours,
-					custom_store_name: null,
-					absence_type: absenceType,
-				}
-			: {
-					store_id: selectedStoreId,
-					start_time: shiftStart,
-					end_time: shiftEnd,
-					hours: shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0),
-					custom_store_name:
-						otherStore && selectedStoreId === otherStore.id ? otherStoreName.trim() : null,
-					absence_type: null,
-				};
+		const newShiftData = {
+			store_id: hasWorkShift ? selectedStoreId : null,
+			start_time: hasWorkShift ? shiftStart : "",
+			end_time: hasWorkShift ? shiftEnd : "",
+			hours: hasWorkShift ? shiftHours(shiftStart, shiftEnd) - (hasBreak ? 0.5 : 0) : 0,
+			custom_store_name:
+				hasWorkShift && otherStore && selectedStoreId === otherStore.id
+					? otherStoreName.trim()
+					: null,
+			absence_type: absenceType,
+			absence_hours: absenceType ? absenceHours : null,
+		};
 
 		setAssignedShifts((prev) => {
 			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
@@ -446,14 +464,17 @@ export default function WeeklyPlanner() {
 	};
 
 	const handleSaveSchedule = async () => {
-		if (weekShifts.length === 0) {
+		// Full-replace: clear every DB row that existed for this week (including
+		// ones removed locally this session), then re-insert what remains.
+		const existingDbShifts = dbShifts.filter(
+			(s) => weekDayKeys.includes(s.shift_date) && s.id > 0,
+		);
+		if (weekShifts.length === 0 && existingDbShifts.length === 0) {
 			toast.info("No shifts to save for this week.");
 			return;
 		}
 		setIsSaving(true);
 		try {
-			// Full-replace: clear existing DB entries then re-insert everything
-			const existingDbShifts = weekShifts.filter((s) => s.id > 0);
 			if (existingDbShifts.length > 0) await clearShifts(existingDbShifts);
 
 			const nested: Record<string, Record<string, ShiftAssignment>> = {};
@@ -466,12 +487,14 @@ export default function WeeklyPlanner() {
 					hours: s.hours,
 					customStoreName: s.custom_store_name ?? undefined,
 					absenceType: s.absence_type ?? undefined,
+					absenceHours: s.absence_hours ?? undefined,
 				};
 			});
 			await insertShift(nested);
 
 			const refreshed = await getAllShifts();
 			setAssignedShifts(refreshed);
+			setDbShifts(refreshed);
 			setIsDirty(false);
 			toast.success(
 				`Schedule saved — ${weekShifts.length} shift${weekShifts.length !== 1 ? "s" : ""}`,
@@ -484,16 +507,20 @@ export default function WeeklyPlanner() {
 	};
 
 	const handleConfirmClear = async () => {
-		if (weekShifts.length === 0) {
+		const existingDbShifts = dbShifts.filter(
+			(s) => weekDayKeys.includes(s.shift_date) && s.id > 0,
+		);
+		if (weekShifts.length === 0 && existingDbShifts.length === 0) {
 			toast.info("No shifts to clear.");
 			setClearDialogOpen(false);
 			return;
 		}
 		setIsClearing(true);
 		try {
-			await clearShifts(weekShifts);
+			if (existingDbShifts.length > 0) await clearShifts(existingDbShifts);
 			const refreshed = await getAllShifts();
 			setAssignedShifts(refreshed);
+			setDbShifts(refreshed);
 			setIsDirty(false);
 			toast.success(`Cleared all shifts for ${currentWeek}`);
 		} catch {
@@ -700,7 +727,7 @@ export default function WeeklyPlanner() {
 						variant="outline"
 						size="sm"
 						onClick={() => setClearDialogOpen(true)}
-						disabled={weekShifts.length === 0 || currentWeek === "null"}
+						disabled={(weekShifts.length === 0 && !weekHasDbShifts) || currentWeek === "null"}
 					>
 						<Trash2 className="h-3.5 w-3.5 mr-1.5" />
 						Clear week
@@ -708,7 +735,11 @@ export default function WeeklyPlanner() {
 					<Button
 						size="sm"
 						onClick={handleSaveSchedule}
-						disabled={weekShifts.length === 0 || currentWeek === "null" || isSaving}
+						disabled={
+							(weekShifts.length === 0 && !weekHasDbShifts) ||
+							currentWeek === "null" ||
+							isSaving
+						}
 					>
 						<Save className="h-3.5 w-3.5 mr-1.5" />
 						{isSaving ? "Saving…" : "Save schedule"}
@@ -899,7 +930,7 @@ export default function WeeklyPlanner() {
 															? stores.find((s) => s.id === shift.store_id)
 															: undefined;
 														const shiftColor =
-															shift && !shift.absence_type && colorMode && shift.store_id
+															shift && colorMode && shift.store_id
 																? getStoreColor(shift.store_id)
 																: null;
 
@@ -927,48 +958,53 @@ export default function WeeklyPlanner() {
 																	<div className="absolute inset-0 pointer-events-none opacity-[0.07] bg-[repeating-linear-gradient(45deg,#888_0,#888_1px,transparent_0,transparent_50%)] bg-size-[8px_8px]" />
 																)}
 
-																{shift?.absence_type ? (
-																	<div className="relative z-10 flex items-center justify-center h-full px-1">
-																		<span
-																			className={cn(
-																				"text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded",
-																				shift.absence_type === "sick" &&
-																					"bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-																				shift.absence_type === "vacation" &&
-																					"bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-																				shift.absence_type === "recup" &&
-																					"bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-																			)}
-																		>
-																			{shift.absence_type === "sick"
-																				? "Sick"
-																				: shift.absence_type === "vacation"
-																					? "Vacances"
-																					: "Récup"}
-																		</span>
-																	</div>
-																) : shift ? (
+																{shift ? (
 																	<div className="relative z-10 flex flex-col items-center justify-center h-full gap-0.5 px-1">
-																		<span
-																			className="font-mono font-bold text-[11px] leading-none tracking-tight"
-																			style={shiftColor ? { color: shiftColor.text } : undefined}
-																		>
-																			{shift.start_time}–{shift.end_time}
-																		</span>
-																		<span
-																			className="text-[9px] leading-none text-muted-foreground"
-																			style={shiftColor ? { color: shiftColor.sub } : undefined}
-																		>
-																			{fmt(shift.hours)}
-																		</span>
-																		{shiftStore && (
+																		{shift.store_id != null && (
+																			<>
+																				<span
+																					className="font-mono font-bold text-[11px] leading-none tracking-tight"
+																					style={shiftColor ? { color: shiftColor.text } : undefined}
+																				>
+																					{shift.start_time}–{shift.end_time}
+																				</span>
+																				<span
+																					className="text-[9px] leading-none text-muted-foreground"
+																					style={shiftColor ? { color: shiftColor.sub } : undefined}
+																				>
+																					{fmt(shift.hours)}
+																				</span>
+																				{shiftStore && (
+																					<span
+																						className="text-[9px] font-semibold leading-none truncate max-w-[90px] px-0.5 text-primary/70"
+																						style={shiftColor ? { color: shiftColor.sub } : undefined}
+																					>
+																						{otherStore && shift.store_id === otherStore.id
+																							? shift.custom_store_name || shiftStore.name
+																							: shiftStore.name}
+																					</span>
+																				)}
+																			</>
+																		)}
+																		{shift.absence_type && (
 																			<span
-																				className="text-[9px] font-semibold leading-none truncate max-w-[90px] px-0.5 text-primary/70"
-																				style={shiftColor ? { color: shiftColor.sub } : undefined}
+																				className={cn(
+																					"text-[9px] font-bold uppercase tracking-wide px-1 py-0.5 rounded",
+																					shift.store_id != null && "mt-0.5",
+																					shift.absence_type === "sick" &&
+																						"bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+																					shift.absence_type === "vacation" &&
+																						"bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+																					shift.absence_type === "recup" &&
+																						"bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+																				)}
 																			>
-																				{otherStore && shift.store_id === otherStore.id
-																					? shift.custom_store_name || shiftStore.name
-																					: shiftStore.name}
+																				{shift.absence_type === "sick"
+																					? "Sick"
+																					: shift.absence_type === "vacation"
+																						? "Vacances"
+																						: "Récup"}
+																				{getShiftAbsenceHours(shift) > 0 && ` ${fmt(getShiftAbsenceHours(shift))}`}
 																			</span>
 																		)}
 																	</div>
@@ -1022,9 +1058,9 @@ export default function WeeklyPlanner() {
 
 													{/* Total */}
 													<td className="px-1 py-2 text-center">
-														{assigned > 0 ? (
+														{assigned + absentHours > 0 ? (
 															<span className="text-[11px] font-semibold text-foreground">
-																{fmt(assigned)}
+																{fmt(assigned + absentHours)}
 															</span>
 														) : (
 															<span className="text-muted-foreground/30 text-[11px]">—</span>
@@ -1212,8 +1248,8 @@ export default function WeeklyPlanner() {
 											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
 												{fmt(
 													weekShifts
-														.filter((s) => fixEmails.has(s.email) && !s.absence_type)
-														.reduce((sum, s) => sum + s.hours, 0),
+														.filter((s) => fixEmails.has(s.email))
+														.reduce((sum, s) => sum + getShiftWorkedHours(s), 0),
 												)}
 											</td>
 										</tr>
@@ -1245,8 +1281,8 @@ export default function WeeklyPlanner() {
 											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
 												{fmt(
 													weekShifts
-														.filter((s) => !fixEmails.has(s.email) && !s.absence_type)
-														.reduce((sum, s) => sum + s.hours, 0),
+														.filter((s) => !fixEmails.has(s.email))
+														.reduce((sum, s) => sum + getShiftWorkedHours(s), 0),
 												)}
 											</td>
 										</tr>
@@ -1277,9 +1313,10 @@ export default function WeeklyPlanner() {
 											<td className="border-r" />
 											<td className="px-1 py-1.5 text-center text-[11px] font-bold">
 												{fmt(
-													weekShifts
-														.filter((s) => !s.absence_type)
-														.reduce((sum, s) => sum + s.hours, 0),
+													weekShifts.reduce(
+														(sum, s) => sum + getShiftWorkedHours(s) + getShiftAbsenceHours(s),
+														0,
+													),
 												)}
 											</td>
 										</tr>
@@ -1315,9 +1352,10 @@ export default function WeeklyPlanner() {
 											<td className="border-r" />
 											<td className="px-1 py-1.5 text-center text-[11px]">
 												{(() => {
-													const total = weekShifts
-														.filter((s) => s.absence_type)
-														.reduce((sum, s) => sum + s.hours, 0);
+													const total = weekShifts.reduce(
+														(sum, s) => sum + getShiftAbsenceHours(s),
+														0,
+													);
 													return total > 0 ? (
 														<span className="font-semibold text-amber-600 dark:text-amber-400">
 															{fmt(total)}
@@ -1353,11 +1391,28 @@ export default function WeeklyPlanner() {
 						</DialogDescription>
 					</DialogHeader>
 
-					{/* Mode selector */}
+					{/* Work shift toggle */}
+					<div className="flex items-center justify-between rounded-lg border px-3 py-2">
+						<span className="text-sm font-medium">Work shift</span>
+						<button
+							type="button"
+							onClick={() => setHasWorkShift((v) => !v)}
+							className={cn(
+								"text-xs font-semibold px-3 py-1 rounded-full transition-colors",
+								hasWorkShift
+									? "bg-primary text-primary-foreground"
+									: "bg-muted text-muted-foreground hover:bg-muted/80",
+							)}
+						>
+							{hasWorkShift ? "On" : "Off"}
+						</button>
+					</div>
+
+					{/* Absence */}
 					<div className="flex rounded-lg border overflow-hidden text-xs font-medium">
 						{(
 							[
-								{ value: null, label: "Shift", activeClass: "bg-primary text-primary-foreground" },
+								{ value: null, label: "None", activeClass: "bg-foreground text-background" },
 								{ value: "sick", label: "Sick", activeClass: "bg-rose-500 text-white" },
 								{ value: "vacation", label: "Vacation", activeClass: "bg-blue-500 text-white" },
 								{ value: "recup", label: "Recup", activeClass: "bg-amber-500 text-white" },
@@ -1380,7 +1435,7 @@ export default function WeeklyPlanner() {
 					</div>
 
 					{/* Availability badge (students only) */}
-					{selectedDayAvail && !absenceType && (
+					{selectedDayAvail && hasWorkShift && (
 						<div>
 							{(() => {
 								const style = AVAILABILITY_STYLES[selectedDayAvail];
@@ -1394,28 +1449,7 @@ export default function WeeklyPlanner() {
 						</div>
 					)}
 
-					{absenceType ? (
-						<div className="space-y-3 py-1">
-							<p className="text-sm text-muted-foreground text-center">
-								This day will be marked as{" "}
-								<span className="font-semibold text-foreground capitalize">{absenceType}</span>.
-							</p>
-							<div className="space-y-1.5">
-								<label className="text-xs font-medium text-muted-foreground">
-									Hours (optional)
-								</label>
-								<Input
-									type="number"
-									min={0}
-									max={24}
-									step={0.5}
-									value={absenceHours || ""}
-									placeholder="0"
-									onChange={(e) => setAbsenceHours(parseFloat(e.target.value) || 0)}
-								/>
-							</div>
-						</div>
-					) : (
+					{hasWorkShift && (
 						<div className="space-y-3 pt-1">
 							{/* Store */}
 							<div className="space-y-1.5">
@@ -1510,6 +1544,30 @@ export default function WeeklyPlanner() {
 						</div>
 					)}
 
+					{absenceType && (
+						<div className="space-y-3 py-1">
+							<p className="text-sm text-muted-foreground text-center">
+								Also mark{" "}
+								<span className="font-semibold text-foreground capitalize">{absenceType}</span>{" "}
+								for this day.
+							</p>
+							<div className="space-y-1.5">
+								<label className="text-xs font-medium text-muted-foreground">
+									Hours (optional)
+								</label>
+								<Input
+									type="number"
+									min={0}
+									max={24}
+									step={0.5}
+									value={absenceHours || ""}
+									placeholder="0"
+									onChange={(e) => setAbsenceHours(parseFloat(e.target.value) || 0)}
+								/>
+							</div>
+						</div>
+					)}
+
 					<DialogFooter className="gap-2">
 						{existingShift && (
 							<Button
@@ -1528,7 +1586,10 @@ export default function WeeklyPlanner() {
 						<Button
 							size="sm"
 							onClick={handleSaveShift}
-							disabled={!absenceType && (isInvalid || !selectedStoreId)}
+							disabled={
+								(hasWorkShift && (isInvalid || !selectedStoreId)) ||
+								(!hasWorkShift && !absenceType)
+							}
 						>
 							{existingShift ? "Update" : "Assign"}
 						</Button>

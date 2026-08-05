@@ -41,6 +41,7 @@ type Shift = {
 	hours: number;
 	custom_store_name?: string | null;
 	absence_type?: AbsenceType | null;
+	absence_hours?: number | null;
 };
 
 type ShiftAssignment = {
@@ -50,6 +51,7 @@ type ShiftAssignment = {
 	hours: number;
 	customStoreName?: string;
 	absenceType?: AbsenceType;
+	absenceHours?: number;
 };
 
 type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";

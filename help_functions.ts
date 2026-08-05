@@ -1,4 +1,4 @@
-import { Availability, DayAvailability, User, Week } from "./types";
+import { Availability, DayAvailability, Shift, User, Week } from "./types";
 import { Sun, Sunset, Clock, X } from "lucide-react";
 import { addDays } from "date-fns";
 
@@ -14,6 +14,17 @@ function convertToCSV(data: Availability[]) {
   const headers = Object.keys(data[0]).join(",");
   const rows = data.map((obj) => Object.values(obj).join(","));
   return [headers, ...rows].join("\n");
+}
+
+function getShiftWorkedHours(shift: Shift): number {
+  return shift.store_id != null ? shift.hours : 0;
+}
+
+function getShiftAbsenceHours(shift: Shift): number {
+  if (!shift.absence_type) return 0;
+  if (shift.absence_hours != null) return shift.absence_hours;
+  // Legacy rows (pre-migration) stored the absence amount directly in `hours`.
+  return shift.store_id == null ? shift.hours : 0;
 }
 
 function getWeekDateRange(weekNumber: number, year: number) {
@@ -154,4 +165,6 @@ export {
   DAY_KEYS,
   getWeekStartDate,
   getAvailabilityForDate,
+  getShiftWorkedHours,
+  getShiftAbsenceHours,
 };
