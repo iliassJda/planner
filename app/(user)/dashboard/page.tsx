@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useUser } from "@/context/user-context";
 import {
   Calendar,
@@ -629,15 +629,35 @@ export default function Dashboard() {
           <h2 className="mb-4 text-xl font-semibold">Submitted Availability</h2>
           <div className="grid gap-4">
             {completedWeeks
-              .sort((a, b) => a.week_number - b.week_number)
-              .map((week) => {
+              .slice()
+              .sort((a, b) => {
+                const aLocked = !isWeekActive(a.week_id);
+                const bLocked = !isWeekActive(b.week_id);
+                if (aLocked !== bLocked) return aLocked ? 1 : -1;
+                return a.week_number - b.week_number;
+              })
+              .map((week, index, sortedWeeks) => {
                 const isExpanded = expandedWeeks.has(week.week_id);
                 const availableDaysCount = getSubmittedWeekAvailabilityCount(week);
                 const weekActive = isWeekActive(week.week_id);
+                const showLockedSeparator =
+                  !weekActive &&
+                  index > 0 &&
+                  isWeekActive(sortedWeeks[index - 1].week_id);
 
                 return (
+                  <Fragment key={week.week_id}>
+                    {showLockedSeparator && (
+                      <div className="flex items-center gap-3 py-1">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                          <Lock className="h-3 w-3" />
+                          Locked
+                        </span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                    )}
                   <Card
-                    key={week.week_id}
                     className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10 hover:bg-green-100/50 dark:hover:bg-green-900/20 transition-colors"
                   >
                     <CardContent className="p-0">
@@ -739,6 +759,7 @@ export default function Dashboard() {
                       )}
                     </CardContent>
                   </Card>
+                  </Fragment>
                 );
               })}
           </div>
