@@ -39,7 +39,8 @@ import {
   getAvailabilityByEmail,
 } from "@/action/supabase";
 // import { useRouter } from "next/navigation";
-import { getWeekDateRange } from "@/help_functions";
+import { getWeekDateRange, getWeekStartDate } from "@/help_functions";
+import { format, addDays } from "date-fns";
 
 import { getInitials } from "@/help_functions";
 
@@ -53,6 +54,9 @@ const DAYS = [
   "sunday",
 ] as const;
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const getDayDate = (weekNumber: number, year: number, index: number) =>
+  format(addDays(getWeekStartDate(weekNumber, year), index), "d MMM");
 
 const AVAILABILITY_OPTIONS = [
   {
@@ -426,7 +430,8 @@ export default function Dashboard() {
                                     <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
                                       <span className="text-primary">{DAY_LABELS[index]}</span>
                                       <span className="text-muted-foreground text-base font-normal">
-                                        ({day.charAt(0).toUpperCase() + day.slice(1)})
+                                        ({day.charAt(0).toUpperCase() + day.slice(1)} ·{" "}
+                                        {getDayDate(week.week_number, week.year, index)})
                                       </span>
                                     </h4>
                                     <div className="grid gap-2">
@@ -641,9 +646,7 @@ export default function Dashboard() {
                 const availableDaysCount = getSubmittedWeekAvailabilityCount(week);
                 const weekActive = isWeekActive(week.week_id);
                 const showLockedSeparator =
-                  !weekActive &&
-                  index > 0 &&
-                  isWeekActive(sortedWeeks[index - 1].week_id);
+                  !weekActive && index > 0 && isWeekActive(sortedWeeks[index - 1].week_id);
 
                 return (
                   <Fragment key={week.week_id}>
@@ -657,108 +660,109 @@ export default function Dashboard() {
                         <div className="h-px flex-1 bg-border" />
                       </div>
                     )}
-                  <Card
-                    className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10 hover:bg-green-100/50 dark:hover:bg-green-900/20 transition-colors"
-                  >
-                    <CardContent className="p-0">
-                      <button
-                        onClick={() => toggleWeekExpansion(week.week_id)}
-                        className="w-full p-6 text-left  rounded-lg"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600">
-                              <CheckCircle2 className="h-5 w-5" />
+                    <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10 hover:bg-green-100/50 dark:hover:bg-green-900/20 transition-colors">
+                      <CardContent className="p-0">
+                        <button
+                          onClick={() => toggleWeekExpansion(week.week_id)}
+                          className="w-full p-6 text-left  rounded-lg"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600">
+                                <CheckCircle2 className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-lg">Week {week.week_number}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
+                                  available • {week.hours > 0 && `${week.hours} hours desired • `}(
+                                  {getWeekDateRange(week.week_number, week.year)})
+                                  {week.comment && ` • ${week.comment}`}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium text-lg">Week {week.week_number}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
-                                available • {week.hours > 0 && `${week.hours} hours desired • `}(
-                                {getWeekDateRange(week.week_number, week.year)})
-                                {week.comment && ` • ${week.comment}`}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-                              Submitted
-                            </span>
-                            {!weekActive && (
-                              <span className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                                <Lock className="h-3 w-3" />
-                                Locked
+                            <div className="flex items-center gap-3">
+                              <span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+                                Submitted
                               </span>
-                            )}
-                            {isExpanded ? (
-                              <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </div>
-                        </div>
-                      </button>
-
-                      {isExpanded && (
-                        <div className="px-6 pb-6 border-t border-green-200 dark:border-green-800">
-                          <div className="pt-4">
-                            <h4 className="font-medium mb-3 text-muted-foreground text-sm">
-                              Weekly Schedule
-                            </h4>
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-                              {DAYS.map((day, index) => {
-                                const availability = week[day];
-                                const option = AVAILABILITY_OPTIONS.find(
-                                  (opt) => opt.value === availability,
-                                );
-                                const Icon = option?.icon || X;
-
-                                return (
-                                  <div key={day} className="rounded-lg border bg-card/50 p-3">
-                                    <div className="text-xs font-medium text-muted-foreground mb-1">
-                                      {DAY_LABELS[index]}
-                                    </div>
-                                    <div
-                                      className={cn(
-                                        "flex items-center gap-2",
-                                        option?.color || "text-muted-foreground",
-                                      )}
-                                    >
-                                      <Icon className="h-4 w-4 flex-shrink-0" />
-                                      <span className="text-sm font-medium truncate">
-                                        {option?.label === "Not Available"
-                                          ? "N/A"
-                                          : option?.label || "N/A"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {!weekActive && (
-                              <p className="pt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                                <Lock className="h-4 w-4 flex-shrink-0" />
-                                This week has been closed by an admin — availability can no longer
-                                be edited. Please make contact for emergency changes.
-                              </p>
-                            )}
-                            <div className="pt-4 flex justify-end">
-                              <Button
-                                onClick={() => handleEditSubmittedWeek(week)}
-                                variant="outline"
-                                size="sm"
-                                className="flex items-center gap-2"
-                                disabled={!weekActive}
-                              >
-                                <CalendarIcon className="h-4 w-4" />
-                                Edit Availability
-                              </Button>
+                              {!weekActive && (
+                                <span className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                                  <Lock className="h-3 w-3" />
+                                  Locked
+                                </span>
+                              )}
+                              {isExpanded ? (
+                                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                              )}
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="px-6 pb-6 border-t border-green-200 dark:border-green-800">
+                            <div className="pt-4">
+                              <h4 className="font-medium mb-3 text-muted-foreground text-sm">
+                                Weekly Schedule
+                              </h4>
+                              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+                                {DAYS.map((day, index) => {
+                                  const availability = week[day];
+                                  const option = AVAILABILITY_OPTIONS.find(
+                                    (opt) => opt.value === availability,
+                                  );
+                                  const Icon = option?.icon || X;
+
+                                  return (
+                                    <div key={day} className="rounded-lg border bg-card/50 p-3">
+                                      <div className="text-xs font-medium text-muted-foreground mb-1">
+                                        {DAY_LABELS[index]}{" "}
+                                        <span className="font-normal">
+                                          {getDayDate(week.week_number, week.year, index)}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "flex items-center gap-2",
+                                          option?.color || "text-muted-foreground",
+                                        )}
+                                      >
+                                        <Icon className="h-4 w-4 flex-shrink-0" />
+                                        <span className="text-sm font-medium truncate">
+                                          {option?.label === "Not Available"
+                                            ? "N/A"
+                                            : option?.label || "N/A"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {!weekActive && (
+                                <p className="pt-4 flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Lock className="h-4 w-4 flex-shrink-0" />
+                                  This week has been closed by an admin — availability can no longer
+                                  be edited. Please make contact for emergency changes.
+                                </p>
+                              )}
+                              <div className="pt-4 flex justify-end">
+                                <Button
+                                  onClick={() => handleEditSubmittedWeek(week)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex items-center gap-2"
+                                  disabled={!weekActive}
+                                >
+                                  <CalendarIcon className="h-4 w-4" />
+                                  Edit Availability
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </Fragment>
                 );
               })}
@@ -792,7 +796,8 @@ export default function Dashboard() {
                     <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
                       <span className="text-primary">{DAY_LABELS[index]}</span>
                       <span className="text-muted-foreground text-base font-normal">
-                        ({day.charAt(0).toUpperCase() + day.slice(1)})
+                        ({day.charAt(0).toUpperCase() + day.slice(1)} ·{" "}
+                        {getDayDate(editingSubmittedWeek.week_number, editingSubmittedWeek.year, index)})
                       </span>
                     </h4>
                     <div className="grid gap-2">
