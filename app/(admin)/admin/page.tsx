@@ -44,8 +44,8 @@ function getCurrentWeek() {
 // Generate a list of weeks starting from current week
 function generateWeeksList(startWeek: number, startYear: number, count: number = 12) {
 	const weeks: Week[] = [];
-	const delta = 4;
-	let currentWeek = startWeek + delta;
+	// const delta = 4;
+	let currentWeek = startWeek;
 	let currentYear = startYear;
 
 	for (let i = 0; i < count; i++) {
@@ -62,7 +62,7 @@ function generateWeeksList(startWeek: number, startYear: number, count: number =
 			currentYear++;
 		}
 	}
-
+	// console.log("Generated weeks list:", weeks);
 	return weeks;
 }
 

@@ -112,17 +112,14 @@ export default function Home() {
 					</div>
 				</section>
 
-			</div>
-
-			{/* Add to Home Screen (iOS) — full-width background */}
-			<section
-				id="install"
-				className="scroll-mt-30 border-t border-[#d2aa78]/15 py-16"
-				style={{
-					background: "linear-gradient(180deg, rgba(224,184,120,0.05), rgba(224,184,120,0))",
-				}}
-			>
-				<div className="mx-auto w-full max-w-5xl px-6 md:px-10">
+				{/* Add to Home Screen (iOS) */}
+				<section
+					id="install"
+					className="scroll-mt-30 border-t border-[#d2aa78]/15 py-16"
+					// style={{
+					// 	background: "linear-gradient(180deg, rgba(224,184,120,0.05), rgba(224,184,120,0))",
+					// }}
+				>
 					<div className="flex flex-wrap items-start justify-between gap-10">
 						<div className="max-w-sm">
 							<span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.24em] text-[#b79574]">
@@ -149,7 +146,7 @@ export default function Home() {
 							<InstallStep
 								n="02"
 								title="Add to Home Screen"
-								desc={`Scroll the share sheet and choose “Add to Home Screen”.`}
+								desc="Scroll the share sheet and choose “Add to Home Screen”."
 							>
 								<Plus className="h-[17px] w-[17px] text-[#e0b878]" />
 							</InstallStep>
@@ -162,10 +159,8 @@ export default function Home() {
 							</InstallStep>
 						</div>
 					</div>
-				</div>
-			</section>
+				</section>
 
-			<div className="mx-auto w-full max-w-5xl px-6 md:px-10">
 				{/* Footer */}
 				<footer className="flex items-center justify-between border-t border-[#d2aa78]/15 py-6 text-xs text-[#9a8267]">
 					<span>© Plannez - Iliass Jdaoudi</span>
