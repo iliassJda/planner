@@ -18,16 +18,17 @@ There is no test suite.
 
 Required in `.env.local`:
 
-| Variable | Purpose |
-|---|---|
-| `AUTH_SECRET` | NextAuth secret |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth credentials |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Admin key (server-only, never exposed to client) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key |
-| `APP_REGION` | Region name used to filter stores (e.g. `"Bruxelles"`) |
-| `GEMINI_API_KEY` | Google Gemini API key for AI schedule generation |
-| `PLANNER_BETA_EMAILS` | Comma-separated email allowlist for beta access |
+| Variable                                | Purpose                                                                                              |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------- | --- |
+| `AUTH_SECRET`                           | NextAuth secret                                                                                      |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth credentials                                                                             |
+| `NEXT_PUBLIC_SUPABASE_URL`              | Supabase project URL                                                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`             | Admin key (server-only, never exposed to client)                                                     |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`         | Public anon key                                                                                      |
+| `APP_REGION`                            | Region name used to filter stores (e.g. `"Bruxelles"`)                                               |
+| `GEMINI_API_KEY`                        | Google Gemini API key for AI schedule generation                                                     |
+| <!--                                    | `PLANNER_BETA_EMAILS`                                                                                | Comma-separated email allowlist for beta access | --> |
+| `PLANNER_SUPPORT_EMAILS`                | Comma-separated email allowlist for `/admin/support` ticket triage. Fails closed: unset means nobody |
 
 ## Architecture
 
@@ -45,6 +46,7 @@ The resolved `User` object is passed down to all client components via `UserProv
 ### User Roles
 
 Three roles defined in `types.ts`:
+
 - **`student`** — submits weekly availability; reads own planning
 - **`fix`** — permanent employees; automatically scheduled every day at their assigned store
 - **`admin`** — manages weeks, users, and the shift planner
@@ -53,17 +55,17 @@ New sign-ins via Google are inserted into Supabase with `allowed: false` and `ro
 
 ### Key Pages
 
-| Route | Purpose |
-|---|---|
-| `/login` | Google OAuth sign-in |
-| `/(user)/dashboard` | Students submit/edit their weekly availability |
-| `/(user)/planning` | Students view their published schedule |
-| `/(admin)/admin` | Admin creates/activates/deactivates weeks for availability collection |
-| `/(admin)/admin/maker` | Drag-and-drop weekly shift planner + AI generation |
-| `/(admin)/admin/all-users` | Approve users, change roles, assign stores |
-| `/(admin)/admin/data` | Export availability data as CSV |
-| `/planning/[weekLabel]` | Public per-week planning view (navigable by week label) |
-| `/api/export` | Excel export endpoint |
+| Route                      | Purpose                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `/login`                   | Google OAuth sign-in                                                  |
+| `/(user)/dashboard`        | Students submit/edit their weekly availability                        |
+| `/(user)/planning`         | Students view their published schedule                                |
+| `/(admin)/admin`           | Admin creates/activates/deactivates weeks for availability collection |
+| `/(admin)/admin/maker`     | Drag-and-drop weekly shift planner + AI generation                    |
+| `/(admin)/admin/all-users` | Approve users, change roles, assign stores                            |
+| `/(admin)/admin/data`      | Export availability data as CSV                                       |
+| `/planning/[weekLabel]`    | Public per-week planning view (navigable by week label)               |
+| `/api/export`              | Excel export endpoint                                                 |
 
 ### Data Layer
 

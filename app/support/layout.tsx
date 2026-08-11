@@ -1,73 +1,58 @@
 import { auth } from "@/auth";
-import { User, Region } from "@/types";
+import { Region, User } from "@/types";
 import { redirect } from "next/navigation";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/app-sidebar";
 import ToggleButton from "@/components/toggle-theme-button";
-// import { Button } from "@/components/ui/button";
-
-// import { Moon, Sun } from "lucide-react";
-// import { useTheme } from "next-themes";
-
 import UserProvider from "@/provider/user-provider";
 import React from "react";
-// import Link from "next/link";
 
 import { getAllowData } from "@/action/supabase";
 import Restricted from "@/components/access-restricted";
 
-export default async function RootLayout({
+/**
+ * Support lives outside the (admin) and (user) route groups on purpose: the
+ * (user) layout redirects admins to /admin, so a shared page placed there is
+ * unreachable for them. This layout admits any approved role instead.
+ */
+export default async function SupportLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
 	const session = await auth();
-	// const { setTheme, theme } = useTheme();
 
 	if (!session?.user) {
 		redirect("/login");
 	}
 
-	// const user = session.user as User;
-	// user?.name?.split(" ")[0]
 	const user: User = {
 		email: session.user.email as string,
+		nickname: "" as string,
 		first_name: session.user.name?.split(" ")[0] as string,
-		nickname: "" as string, // Nickname is not currently stored in the session, so we initialize it as an empty string. It can be updated later when we fetch user data from the database.
 		image: session.user.image as string,
 		role: "student",
-		region: { id: 1, name: "Bruxelles" } as Region, // Region is hardcoded for now but should not be
-		// admin: false,
-		// allowed: false,
+		region: { id: 1, name: "Bruxelles" } as Region,
 	};
-	// This gets the data to check whether the user is allowed on the website by checking the
-	// allowed column in supabase
+
 	const data = await getAllowData();
 
 	if (data == null) {
 		return Restricted({ user });
 	}
 
-	// const roles = data.roles;
-
-	// user.allowed = true;
-
-	if (data.role === "admin") {
-		redirect("/admin");
-	}
-
-	// Carry the resolved role through. Without this the object keeps its
-	// hardcoded "student" default, so a `fix` account renders the student
-	// sidebar and anything reading useUser().role misidentifies them.
+	// Unlike the (admin)/(user) layouts, carry the resolved role through so the
+	// sidebar renders the right nav for whoever is actually signed in.
 	user.role = data.role;
 
+	// NotificationBell is intentionally absent: it calls getNotifications(),
+	// which is admin-guarded and would throw for a student on this page.
 	return (
 		<SidebarProvider>
 			<UserProvider user={user}>
 				<AppSidebar />
-				<SidebarInset>
+				<SidebarInset className="min-w-0">
 					<header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b">
 						<div className="flex items-center gap-2 px-3">
 							<SidebarTrigger />

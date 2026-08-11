@@ -83,6 +83,37 @@ type Store = {
 	region: Region;
 };
 
+type TicketCategory = "bug" | "feedback" | "question";
+
+type TicketStatus = "open" | "in_progress" | "resolved";
+
+/**
+ * A ticket as shown to the client. Deliberately carries no email: the list is
+ * shared with everyone in the pool, so the author is identified by display name
+ * only and `is_mine` is resolved server-side against the session.
+ */
+type Ticket = {
+	id: number;
+	created_at: string;
+	category: TicketCategory;
+	message: string;
+	status: TicketStatus;
+	admin_response: string | null;
+	author_name: string;
+	is_mine: boolean;
+};
+
+/**
+ * A ticket as seen in the triage view. Unlike `Ticket` this carries the
+ * reporter's email and role: the whole point is knowing who filed what so you
+ * can follow up, and the audience is the support allowlist only.
+ */
+type TriageTicket = Omit<Ticket, "is_mine"> & {
+	email: string;
+	author_role: RoleName;
+	resolved_at: string | null;
+};
+
 export type {
 	User,
 	RoleName,
@@ -95,4 +126,8 @@ export type {
 	Shift,
 	AbsenceType,
 	TimetableEntry,
+	Ticket,
+	TriageTicket,
+	TicketCategory,
+	TicketStatus,
 };

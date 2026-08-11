@@ -48,9 +48,9 @@ export default async function RootLayout({
 		return Restricted({ user });
 	}
 
-	user.role = "admin";
-
-	//Check for admin !
+	// Guaranteed to be "admin" by the guard above; read it from the resolved
+	// data rather than re-asserting the literal.
+	user.role = data.role;
 
 	return (
 		<SidebarProvider>

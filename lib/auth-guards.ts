@@ -52,3 +52,32 @@ export async function requireAdmin(): Promise<SessionUser> {
 	if (user.role !== "admin") throw new Error("Forbidden");
 	return user;
 }
+
+/** Emails allowed to read and answer every ticket, from PLANNER_SUPPORT_EMAILS. */
+export function supportAdminEmails(): string[] {
+	return (process.env.PLANNER_SUPPORT_EMAILS ?? "")
+		.split(",")
+		.map((e) => e.trim().toLowerCase())
+		.filter(Boolean);
+}
+
+export function isSupportAdminEmail(email: string): boolean {
+	const allowed = supportAdminEmails();
+	// Fail closed: an unset or empty allowlist grants nobody access rather than
+	// silently opening every ticket to all admins.
+	return allowed.length > 0 && allowed.includes(email.toLowerCase());
+}
+
+/**
+ * Asserts a caller allowed to triage *all* tickets, across both pools.
+ *
+ * Separate from `requireAdmin` on purpose: the pools exist so the manager keeps
+ * their own space and never reads student reports, so this is an explicit email
+ * allowlist rather than a role. Admin is still required underneath as defence in
+ * depth.
+ */
+export async function requireSupportAdmin(): Promise<SessionUser> {
+	const user = await requireAdmin();
+	if (!isSupportAdminEmail(user.email)) throw new Error("Forbidden");
+	return user;
+}

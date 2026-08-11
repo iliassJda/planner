@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { getNotifications, markNotificationsRead, type Notification } from "@/action/supabase";
 import { createClient } from "@/utils/supabase/client";
+import { timeAgo } from "@/help_functions";
 
 const DAY_LABELS: Record<string, string> = {
   monday: "Mon",
@@ -37,17 +38,6 @@ function formatChange(change: { field: string; from: string; to: string }) {
   const from = AVAIL_LABELS[change.from] ?? change.from;
   const to = AVAIL_LABELS[change.to] ?? change.to;
   return `${day}: ${from} → ${to}`;
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 export default function NotificationBell() {
