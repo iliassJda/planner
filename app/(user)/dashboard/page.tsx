@@ -36,7 +36,7 @@ import {
   getAllWeeks,
   insertAvailability,
   updateAvailability,
-  getAvailabilityByEmail,
+  getMyAvailability,
 } from "@/action/supabase";
 // import { useRouter } from "next/navigation";
 import { getWeekDateRange, getWeekStartDate } from "@/help_functions";
@@ -112,7 +112,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
-    const availabilityData = await getAvailabilityByEmail(user?.email || "");
+    const availabilityData = await getMyAvailability();
     const weeksData = await getAllWeeks();
     const activeWeeksData: Week[] = weeksData
       .filter((week) => !availabilityData.some((a) => a.week_id === week.id))

@@ -2,9 +2,9 @@
 
 import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { format, subWeeks } from "date-fns";
+import { getCurrentUser, requireUser, requireAdmin } from "@/lib/auth-guards";
 
-const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
+// Role validation moved to lib/auth-guards.ts alongside session resolution.
 
 // async function getRoleId(role: RoleName) {
 //   const { data: roleData, error: roleError } = await supabaseAdmin
@@ -15,11 +15,9 @@ const ROLE_NAMES: RoleName[] = ["admin", "student", "fix"];
 //   return { roleData, roleError };
 // }
 
-function isRoleName(value: unknown): value is RoleName {
-  return typeof value === "string" && ROLE_NAMES.includes(value as RoleName);
-}
-
 async function exportAvailability() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin.from("Availability").select("*");
 
   if (error) {
@@ -31,6 +29,8 @@ async function exportAvailability() {
 }
 
 async function deactivateWeek(weekId: string) {
+  await requireAdmin();
+
   // First set is_active to false for the week
   const { data: updatedWeek, error: weekError } = await supabaseAdmin
     .from("Week")
@@ -47,6 +47,8 @@ async function deactivateWeek(weekId: string) {
 }
 
 async function activateWeek(weekId: string) {
+  await requireAdmin();
+
   // First set is_active to true for the week
   const { data: updatedWeek, error: weekError } = await supabaseAdmin
     .from("Week")
@@ -62,41 +64,15 @@ async function activateWeek(weekId: string) {
   return updatedWeek as Week[];
 }
 
-async function getAllowData(user: User) {
-  const { data, error } = await supabaseAdmin
-    .from("User")
-    // .select("email, allowed, admin")
-    .select("email, allowed, role_name")
-    .eq("email", user.email)
-    .eq("allowed", true)
-    .maybeSingle(); // <-- IMPORTANT
-
-  if (error) {
-    console.error(error);
-    return null;
-  }
-
-  // console.log("This is the data: ", data);
-
-  if (!data) {
-    return null;
-  }
-
-  const roleName = data.role_name;
-
-  // return data; // returns: { email: string, allowed: boolean } | null
-  // const rawRole = Array.isArray(data.roles)
-  //   ? data.roles[0]?.name
-  //   : (data.roles as { name?: string } | null)?.name;
-
-  if (!isRoleName(roleName)) {
-    return null;
-  }
-
-  return {
-    email: data.email,
-    role: roleName,
-  };
+/**
+ * Approval + role for the *current* caller, or null if not signed in / not approved.
+ *
+ * Takes no email argument on purpose: it used to accept one, which let any
+ * caller probe whether an arbitrary address was approved and what role it held.
+ * Identity now comes from the session only.
+ */
+async function getAllowData() {
+  return getCurrentUser();
 }
 
 // async function getAllUsers() {
@@ -113,6 +89,8 @@ async function getAllowData(user: User) {
 // }
 
 async function getAllUsers() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("User")
     .select("email, first_name, nickname, image, allowed, role_name, store_id, contract_hours");
@@ -136,6 +114,8 @@ async function getAllUsers() {
 }
 
 async function getTotalStudents() {
+  await requireAdmin();
+
   // const { roleData, roleError } = await getRoleId("user");
 
   // if (roleError) {
@@ -173,6 +153,8 @@ async function getAllWeeks() {
 }
 
 async function insertWeeks(weeks: Omit<Week, "is_active">[]) {
+  await requireAdmin();
+
   const weeksToInsert = weeks.map((week) => ({
     id: week.id,
     week_number: week.week_number,
@@ -193,6 +175,8 @@ async function insertWeeks(weeks: Omit<Week, "is_active">[]) {
 
 // Upsert version - inserts or updates if already exists
 async function upsertWeeks(weeks: Omit<Week, "is_active">[]) {
+  await requireAdmin();
+
   const weeksToUpsert = weeks.map((week) => ({
     id: week.id,
     week_number: week.week_number,
@@ -226,11 +210,15 @@ async function isWeekActive(weekId: string): Promise<boolean> {
 }
 
 async function insertAvailability(availability: Availability) {
-  if (!(await isWeekActive(availability.week_id))) {
+  const { email } = await requireUser();
+  // Bind the row to the caller rather than to the client-supplied email.
+  const record: Availability = { ...availability, email };
+
+  if (!(await isWeekActive(record.week_id))) {
     throw new Error("This week is no longer accepting availability submissions.");
   }
 
-  const { data, error } = await supabaseAdmin.from("Availability").insert(availability).select();
+  const { data, error } = await supabaseAdmin.from("Availability").insert(record).select();
 
   if (error) {
     console.error("Error inserting availability:", error);
@@ -264,6 +252,8 @@ function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignmen
 }
 
 async function insertShift(shifts: Record<string, Record<string, ShiftAssignment>>) {
+  await requireAdmin();
+
   const result = fromRecordToShifts(shifts);
   const { data, error } = await supabaseAdmin.from("shifts").insert(result).select();
 
@@ -273,6 +263,8 @@ async function insertShift(shifts: Record<string, Record<string, ShiftAssignment
 }
 
 async function getAllShifts() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin.from("shifts").select("*");
 
   if (error) throw new Error(error.message);
@@ -281,6 +273,8 @@ async function getAllShifts() {
 }
 
 async function clearShifts(shifts: Shift[]) {
+  await requireAdmin();
+
   const shiftIds = shifts.map((s) => s.id);
 
   const { error } = await supabaseAdmin.from("shifts").delete().in("id", shiftIds);
@@ -289,7 +283,12 @@ async function clearShifts(shifts: Shift[]) {
 }
 
 async function updateAvailability(availability: Availability) {
-  if (!(await isWeekActive(availability.week_id))) {
+  const { email } = await requireUser();
+  // Bind the row to the caller. The email carried in the payload comes from the
+  // client and must never be trusted to address someone else's availability.
+  const record: Availability = { ...availability, email };
+
+  if (!(await isWeekActive(record.week_id))) {
     throw new Error("This week has been closed and can no longer be edited.");
   }
 
@@ -307,15 +306,15 @@ async function updateAvailability(availability: Availability) {
   const { data: oldRows } = await supabaseAdmin
     .from("Availability")
     .select("*")
-    .eq("week_id", availability.week_id)
-    .eq("email", availability.email)
+    .eq("week_id", record.week_id)
+    .eq("email", email)
     .maybeSingle();
 
   const { data, error } = await supabaseAdmin
     .from("Availability")
-    .update(availability)
-    .eq("week_id", availability.week_id)
-    .eq("email", availability.email)
+    .update(record)
+    .eq("week_id", record.week_id)
+    .eq("email", email)
     .select();
 
   if (error) {
@@ -342,9 +341,9 @@ async function updateAvailability(availability: Availability) {
 
     if (changes.length > 0) {
       await supabaseAdmin.from("notifications").insert({
-        email: availability.email,
-        week_id: availability.week_id,
-        week_number: availability.week_number,
+        email,
+        week_id: record.week_id,
+        week_number: record.week_number,
         changes,
       });
     }
@@ -353,7 +352,9 @@ async function updateAvailability(availability: Availability) {
   return data as Availability[];
 }
 
-async function getAvailabilityByEmail(email: string) {
+async function getMyAvailability() {
+  const { email } = await requireUser();
+
   const { data, error } = await supabaseAdmin.from("Availability").select("*").eq("email", email);
 
   if (error) {
@@ -365,6 +366,8 @@ async function getAvailabilityByEmail(email: string) {
 }
 
 async function deleteWeek(weekId: string) {
+  await requireAdmin();
+
   // First delete all availability records for this week
   const { error: availabilityError } = await supabaseAdmin
     .from("Availability")
@@ -388,6 +391,8 @@ async function deleteWeek(weekId: string) {
 }
 
 async function updateUserPermissions(email: string, role: RoleName) {
+  await requireAdmin();
+
   // console.log("This is the current role: ", role);
 
   // const { roleData, roleError } = await getRoleId(role);
@@ -412,6 +417,8 @@ async function updateUserPermissions(email: string, role: RoleName) {
 }
 
 async function updateUserStatus(email: string, allowed: boolean) {
+  await requireAdmin();
+
   const { data: userData } = await supabaseAdmin.from("User").select("allowed").eq("email", email);
 
   // console.log("this is the data -> ", userData);
@@ -475,6 +482,8 @@ async function getStoresForApp() {
 }
 
 async function assignUserStore(email: string, storeId: number | null) {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("User")
     .update({ store_id: storeId })
@@ -490,6 +499,8 @@ async function assignUserStore(email: string, storeId: number | null) {
 }
 
 async function getAllAvailability() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("Availability")
     .select("*")
@@ -504,6 +515,8 @@ async function getAllAvailability() {
 }
 
 async function getComments() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("Availability")
     .select("email, week_id, comment");
@@ -517,6 +530,8 @@ async function getComments() {
 }
 
 async function getCsvAvailabilities(availabilityData: Availability[]) {
+  await requireAdmin();
+
   const headers = [
     "Email",
     "Week ID",
@@ -555,6 +570,8 @@ async function getCsvAvailabilities(availabilityData: Availability[]) {
 }
 
 async function createEmployee(name: string) {
+  await requireAdmin();
+
   const slug = name.trim().toLowerCase().replace(/\s+/g, ".");
   const email = `${slug}.${Date.now()}@employee.local`;
 
@@ -572,6 +589,8 @@ async function createEmployee(name: string) {
 }
 
 async function changeNickname(email: string, newNickname: string) {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("User")
     .update({ nickname: newNickname })
@@ -597,6 +616,8 @@ export type Notification = {
 };
 
 async function getNotifications() {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("notifications")
     .select("*")
@@ -612,6 +633,8 @@ async function getNotifications() {
 }
 
 async function markNotificationsRead(ids: number[]) {
+  await requireAdmin();
+
   const { error } = await supabaseAdmin
     .from("notifications")
     .update({ is_read: true })
@@ -623,6 +646,8 @@ async function markNotificationsRead(ids: number[]) {
 }
 
 async function getTimetable(email: string) {
+  await requireAdmin();
+
   const { data, error } = await supabaseAdmin
     .from("timetable")
     .select("day_of_week, start_time, end_time, store_id")
@@ -644,6 +669,8 @@ async function getTimetablesForUsers(
     { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[]
   >
 > {
+  await requireAdmin();
+
   if (emails.length === 0) return {};
   const { data, error } = await supabaseAdmin
     .from("timetable")
@@ -677,6 +704,8 @@ async function saveTimetable(
   contractHours: number | null,
   entries: { day_of_week: number; start_time: string; end_time: string; store_id: number | null }[],
 ) {
+  await requireAdmin();
+
   const { error: deleteError } = await supabaseAdmin
     .from("timetable")
     .delete()
@@ -785,37 +814,14 @@ async function getPlanningPageData(weekLabel?: string) {
   return { week, weekDates, shifts, users, stores, prevWeek, nextWeek, allWeeks };
 }
 
-async function getUpcomingShiftsForUser(email: string) {
-  const since = format(subWeeks(new Date(), 2), "yyyy-MM-dd");
+// getUpcomingShiftsForUser and verifyIcalToken now live in lib/ical-data.ts.
+// The iCal feed authenticates by token rather than by session, so exporting
+// them from this "use server" module would have published them as unauthenticated
+// endpoints that leak any user's shifts by email.
 
-  const { data, error } = await supabaseAdmin
-    .from("shifts")
-    .select("*")
-    .eq("email", email)
-    .gte("shift_date", since);
+async function getIcalToken() {
+  const { email } = await requireUser();
 
-  if (error) throw error;
-  // Only emit calendar events for the work portion of a shift; pure absence
-  // rows (no store) never had a work component to put on the calendar.
-  return (data as Shift[]).filter((s) => s.store_id != null);
-}
-
-async function verifyIcalToken(token: string) {
-  const { data, error } = await supabaseAdmin
-    .from("User")
-    .select("email")
-    .eq("ical_token", token)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Error verifying ical token:", error);
-    return null;
-  }
-
-  return data?.email ?? null;
-}
-
-async function getIcalToken(email: string) {
   const { data, error } = await supabaseAdmin
     .from("User")
     .select("ical_token")
@@ -838,7 +844,7 @@ export {
   upsertWeeks,
   insertAvailability,
   updateAvailability,
-  getAvailabilityByEmail,
+  getMyAvailability,
   deleteWeek,
   getAllUsers,
   updateUserPermissions,
@@ -863,7 +869,5 @@ export {
   getTimetable,
   saveTimetable,
   getTimetablesForUsers,
-  getUpcomingShiftsForUser,
-  verifyIcalToken,
   getIcalToken,
 };

@@ -1,3 +1,5 @@
+import { LifeBuoy, Send } from "lucide-react";
+
 const userData = {
 	navMain: [
 		{
@@ -32,4 +34,18 @@ const adminData = {
 	],
 };
 
-export { userData, adminData };
+const feedbackData = {
+	navFeedback: [
+		{
+			title: "Support",
+			url: "/support",
+			icon: LifeBuoy,
+		},
+		// {
+		// 	title: "Suggest a Feature",
+		// 	url: "/feedback/feature",
+		// },
+	],
+};
+
+export { userData, adminData, feedbackData };

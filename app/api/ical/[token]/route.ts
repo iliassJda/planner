@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import ical from "ical-generator";
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
-import { verifyIcalToken, getUpcomingShiftsForUser, getStoresForApp } from "@/action/supabase";
+import { getStoresForApp } from "@/action/supabase";
+import { verifyIcalToken, getUpcomingShiftsForUser } from "@/lib/ical-data";
 
 export const dynamic = "force-dynamic";
 

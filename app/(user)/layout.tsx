@@ -44,7 +44,7 @@ export default async function RootLayout({
 	};
 	// This gets the data to check whether the user is allowed on the website by checking the
 	// allowed column in supabase
-	const data = await getAllowData(user);
+	const data = await getAllowData();
 
 	if (data == null) {
 		return Restricted({ user });

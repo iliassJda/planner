@@ -56,25 +56,36 @@ export default function NotificationBell() {
   const supabaseRef = useRef(createClient());
 
   useEffect(() => {
-    getNotifications().then(setNotifications);
+    getNotifications()
+      .then(setNotifications)
+      .catch((e) => console.error("Could not load notifications:", e));
   }, []);
 
   useEffect(() => {
-    const channel = supabaseRef.current
+    const supabase = supabaseRef.current;
+
+    // We subscribe to notification_events, not notifications. Realtime enforces
+    // RLS against the anon key that ships to the browser, so broadcasting the
+    // notifications table itself would mean making employee emails and
+    // availability changes publicly readable. notification_events carries only
+    // an id and a timestamp; a DB trigger emits one row per new notification.
+    // The signal tells us *that* something changed, then we refetch the actual
+    // rows through getNotifications(), which is admin-guarded on the server.
+    const channel = supabase
       .channel("notifications-realtime")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
-          const row = payload.new as Notification;
-          // setNotifications((prev) => [row, ...prev].slice(0, 50));
-          setNotifications((prev) => [row, ...prev]);
+        { event: "INSERT", schema: "public", table: "notification_events" },
+        () => {
+          getNotifications()
+            .then(setNotifications)
+            .catch((e) => console.error("Could not refresh notifications:", e));
         },
       )
       .subscribe();
 
     return () => {
-      supabaseRef.current.removeChannel(channel);
+      supabase.removeChannel(channel);
     };
   }, []);
 

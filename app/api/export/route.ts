@@ -1,29 +1,18 @@
 import { getAllAvailability } from "@/action/supabase";
 import { convertToCSV } from "@/help_functions";
-import { auth } from "@/auth";
+import { getCurrentUser } from "@/lib/auth-guards";
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/utils/supabase/admin";
 
 export async function GET() {
-	const session = await auth();
+	// Previously selected a non-existent "admin" column, which made this route
+	// error out for everyone. Role lives in User.role_name.
+	const user = await getCurrentUser();
 
-	if (!session?.user?.email) {
+	if (!user) {
 		return new NextResponse("Unauthorized", { status: 401 });
 	}
 
-	const email = session.user.email;
-
-	const { data: user, error } = await supabaseAdmin
-		.from("User")
-		.select("admin, allowed")
-		.eq("email", email)
-		.maybeSingle();
-
-	if (error) {
-		return new NextResponse("Error fetching user data", { status: 500 });
-	}
-
-	if (!user?.admin) {
+	if (user.role !== "admin") {
 		return new NextResponse("Forbidden: No rights...", { status: 403 });
 	}
 

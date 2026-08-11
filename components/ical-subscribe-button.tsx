@@ -24,7 +24,7 @@ export default function IcalSubscribeButton({ email }: { email: string }) {
 		if (!open || url || loading) return;
 		setLoading(true);
 		try {
-			const token = await getIcalToken(email);
+			const token = await getIcalToken();
 			if (!token) {
 				toast.error("Could not load your calendar link");
 				return;
