@@ -1,7 +1,12 @@
 "use server";
 
 import { supabaseAdmin } from "@/utils/supabase/admin";
-import { requireUser, requireSupportAdmin } from "@/lib/auth-guards";
+import {
+	getCurrentUser,
+	isDeveloperEmail,
+	requireUser,
+	requireSupportAdmin,
+} from "@/lib/auth-guards";
 import type { RoleName, Ticket, TriageTicket, TicketCategory, TicketStatus } from "@/types";
 
 const CATEGORIES: TicketCategory[] = ["bug", "feedback", "question"];
@@ -13,6 +18,22 @@ const MESSAGE_MAX = 2000;
 
 /** Roles sharing the non-admin pool. Admins get their own. */
 const STAFF_ROLES = ["student", "fix"];
+
+/**
+ * Whether the caller may reach the triage view, for client components that need
+ * to know without importing the guards directly.
+ *
+ * `lib/auth-guards` pulls in `supabaseAdmin`, so importing it from a
+ * `"use client"` file drags the service-role client into the browser bundle,
+ * where the key is undefined and supabase-js throws "supabaseKey is required".
+ * Going through a server action keeps that on the server where it belongs.
+ *
+ * Returns false rather than throwing: anonymous visitors call this too.
+ */
+export async function isCurrentUserDeveloper(): Promise<boolean> {
+	const user = await getCurrentUser();
+	return !!user && isDeveloperEmail(user.email);
+}
 
 type CreateTicketInput = {
 	category: TicketCategory;

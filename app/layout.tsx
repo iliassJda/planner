@@ -5,6 +5,7 @@ import "./globals.css";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/provider/theme-provider";
 import { Toaster } from "sonner";
+import SupportShortcut from "@/components/support-shortcut";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -51,6 +52,7 @@ export default async function RootLayout({
 				>
 					{/* {children} */}
 					<SessionProvider>{children}</SessionProvider>
+					<SupportShortcut />
 					<Toaster />
 				</ThemeProvider>
 			</body>

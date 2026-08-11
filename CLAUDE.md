@@ -28,7 +28,7 @@ Required in `.env.local`:
 | `APP_REGION`                            | Region name used to filter stores (e.g. `"Bruxelles"`)                                               |
 | `GEMINI_API_KEY`                        | Google Gemini API key for AI schedule generation                                                     |
 | <!--                                    | `PLANNER_BETA_EMAILS`                                                                                | Comma-separated email allowlist for beta access | --> |
-| `PLANNER_SUPPORT_EMAILS`                | Comma-separated email allowlist for `/admin/support` ticket triage. Fails closed: unset means nobody |
+| `DEVELOPER_EMAILS`                      | Comma-separated email allowlist for `/admin/support` ticket triage. Fails closed: unset means nobody |
 
 ## Architecture
 

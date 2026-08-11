@@ -210,6 +210,13 @@ export default function Home() {
 						<span className="text-[12.5px] text-[#9a8267]">
 							Sign in first — every report is tied to your account
 						</span>
+						{/* <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#9a8267]">
+							or press
+							<kbd className="rounded border border-[#d2aa78]/30 bg-[#f6ede0]/[0.06] px-1.5 py-0.5 font-sans text-[11px] font-medium text-[#e0b878]">
+								S
+							</kbd>
+							from anywhere
+						</span> */}
 					</div>
 				</section>
 

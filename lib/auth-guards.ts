@@ -53,16 +53,22 @@ export async function requireAdmin(): Promise<SessionUser> {
 	return user;
 }
 
-/** Emails allowed to read and answer every ticket, from PLANNER_SUPPORT_EMAILS. */
-export function supportAdminEmails(): string[] {
-	return (process.env.PLANNER_SUPPORT_EMAILS ?? "")
+export async function requireDeveloper(): Promise<SessionUser> {
+	const user = await requireUser();
+	if (user.role !== "admin" && !isDeveloperEmail(user.email)) throw new Error("Forbidden");
+	return user;
+}
+
+/** Emails allowed to read and answer every ticket, from DEVELOPER_EMAILS. */
+export function developerEmails(): string[] {
+	return (process.env.DEVELOPER_EMAILS ?? "")
 		.split(",")
 		.map((e) => e.trim().toLowerCase())
 		.filter(Boolean);
 }
 
-export function isSupportAdminEmail(email: string): boolean {
-	const allowed = supportAdminEmails();
+export function isDeveloperEmail(email: string): boolean {
+	const allowed = developerEmails();
 	// Fail closed: an unset or empty allowlist grants nobody access rather than
 	// silently opening every ticket to all admins.
 	return allowed.length > 0 && allowed.includes(email.toLowerCase());
@@ -78,6 +84,6 @@ export function isSupportAdminEmail(email: string): boolean {
  */
 export async function requireSupportAdmin(): Promise<SessionUser> {
 	const user = await requireAdmin();
-	if (!isSupportAdminEmail(user.email)) throw new Error("Forbidden");
+	if (!isDeveloperEmail(user.email)) throw new Error("Forbidden");
 	return user;
 }
