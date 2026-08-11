@@ -5,7 +5,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Cormorant_Garamond } from "next/font/google";
-import { Share, Plus } from "lucide-react";
+import { Share, Plus, Bug, MessageSquare, HelpCircle, LifeBuoy } from "lucide-react";
 import { login } from "@/action/authentication";
 
 const cormorant = Cormorant_Garamond({
@@ -43,6 +43,9 @@ export default function Home() {
 						</a>
 						<a href="#install" className="hidden text-[#c3a888] hover:text-[#f2e7d8] sm:inline">
 							Install
+						</a>
+						<a href="#support" className="hidden text-[#c3a888] hover:text-[#f2e7d8] sm:inline">
+							Support
 						</a>
 						{/* <Link
 							href="/login"
@@ -161,6 +164,55 @@ export default function Home() {
 					</div>
 				</section>
 
+				{/* Support */}
+				<section id="support" className="scroll-mt-8 border-t border-[#d2aa78]/15 py-16">
+					<div className="mx-auto mb-12 max-w-3xl text-center">
+						<span className="text-xs uppercase tracking-[0.24em] text-[#b79574]">Support</span>
+						<h2 className="font-serif mt-2.5 text-3xl font-medium text-[#f6ede0]">
+							Questions? Feedback? Suggestions?
+						</h2>
+						<p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-[#b6a08a]">
+							Send it straight from the app — no email, no forms. Reports are shared with the rest
+							of your team, so you can see what&apos;s already been raised, and any reply lands
+							right underneath yours.
+						</p>
+					</div>
+
+					<div className="grid gap-6 sm:grid-cols-3">
+						<SupportCard
+							title="Report a bug"
+							desc="Something broke or showed the wrong thing. Tell us what you were doing just before it went wrong."
+						>
+							<Bug className="h-[17px] w-[17px] text-[#e0b878]" />
+						</SupportCard>
+						<SupportCard
+							title="Share feedback"
+							desc="Anything that felt clumsy, confusing, or slower than it should be. Small annoyances count."
+						>
+							<MessageSquare className="h-[17px] w-[17px] text-[#e0b878]" />
+						</SupportCard>
+						<SupportCard
+							title="Ask a question"
+							desc="Not sure how something works? Ask, and the answer stays where your team can find it."
+						>
+							<HelpCircle className="h-[17px] w-[17px] text-[#e0b878]" />
+						</SupportCard>
+					</div>
+
+					<div className="mt-10 flex flex-col items-center gap-3">
+						<Link
+							href="/support"
+							className="inline-flex items-center gap-2.5 rounded-full border border-[#d2aa78]/30 px-6 py-3 text-[15px] font-medium text-[#f2e7d8] transition-colors hover:border-[#d2aa78]/60"
+						>
+							<LifeBuoy className="h-[17px] w-[17px] text-[#e0b878]" />
+							Open support
+						</Link>
+						<span className="text-[12.5px] text-[#9a8267]">
+							Sign in first — every report is tied to your account
+						</span>
+					</div>
+				</section>
+
 				{/* Footer */}
 				<footer className="flex items-center justify-between border-t border-[#d2aa78]/15 py-6 text-xs text-[#9a8267]">
 					<span>© Plannez - Iliass Jdaoudi</span>
@@ -201,6 +253,26 @@ function InstallStep({
 					{children}
 				</span>
 			</div>
+			<h3 className="mb-1.5 text-[15.5px] font-semibold text-[#f2e7d8]">{title}</h3>
+			<p className="text-[13.5px] leading-relaxed text-[#b6a08a]">{desc}</p>
+		</div>
+	);
+}
+
+function SupportCard({
+	title,
+	desc,
+	children,
+}: {
+	title: string;
+	desc: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div className="rounded-xl border border-[#d2aa78]/15 bg-[#f6ede0]/[0.04] p-5.5">
+			<span className="mb-4 inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-[#d2aa78]/25 bg-[#e0b878]/10">
+				{children}
+			</span>
 			<h3 className="mb-1.5 text-[15.5px] font-semibold text-[#f2e7d8]">{title}</h3>
 			<p className="text-[13.5px] leading-relaxed text-[#b6a08a]">{desc}</p>
 		</div>
