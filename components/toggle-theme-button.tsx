@@ -9,7 +9,7 @@ export default function ToggleButton() {
     <Button
       variant="outline"
       size="icon"
-      className="mr-3"
+      className="mr-3 size-11 sm:size-9"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
     >
       <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />

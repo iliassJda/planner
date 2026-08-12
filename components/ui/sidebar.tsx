@@ -254,7 +254,9 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
 			data-slot="sidebar-trigger"
 			variant="ghost"
 			size="icon"
-			className={cn("size-7", className)}
+			// size-11 below sm: this is the only navigation control on phones and
+			// rendered 28px, well under the 44px touch minimum. Desktop unchanged.
+			className={cn("size-11 sm:size-7", className)}
 			onClick={(event) => {
 				onClick?.(event);
 				toggleSidebar();

@@ -197,8 +197,91 @@ export default async function PlanningPage({ params }: { params: Promise<{ weekL
                   )}
                 </div>
 
-                {/* Days grid */}
-                <div className="grid grid-cols-7 divide-x text-center text-[11px]">
+                {/* Phones: one row per day that has something.
+                    The seven-column grid below gives each cell ~43px, which
+                    clipped every store name ("Galerie de la Reine" needs 79px),
+                    and the store is half the point of this view. Empty days
+                    carry no information here, so dropping them buys the width
+                    to show the name in full. */}
+                <div className="flex flex-col divide-y sm:hidden">
+                  {weekDays.every((_, i) => !shiftFor(user.email, weekDates[i])) && (
+                    <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                      No shifts this week
+                    </p>
+                  )}
+                  {weekDays.map((day, i) => {
+                    const dateKey = weekDates[i];
+                    const shift = shiftFor(user.email, dateKey);
+                    if (!shift) return null;
+
+                    const store = shift.store_id
+                      ? stores.find((s) => s.id === shift.store_id)
+                      : undefined;
+                    const colour = storeColour(store);
+                    const storeName =
+                      otherStore && shift.store_id === otherStore.id
+                        ? shift.custom_store_name || store?.name
+                        : store?.name;
+
+                    return (
+                      <div
+                        key={dateKey}
+                        className="flex items-center gap-3 px-3 py-2"
+                        style={
+                          colour && shift.store_id != null
+                            ? { backgroundColor: colour.bg }
+                            : undefined
+                        }
+                      >
+                        <div className="w-11 shrink-0">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                            {format(day, "EEE", { locale: fr })}
+                          </p>
+                          <p className="text-[10px] font-medium text-muted-foreground">
+                            {format(day, "d")}
+                          </p>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {shift.store_id != null && (
+                            <>
+                              <p
+                                className="font-mono text-xs font-bold leading-tight"
+                                style={colour ? { color: colour.text } : undefined}
+                              >
+                                {shift.start_time} – {shift.end_time}
+                              </p>
+                              {storeName && (
+                                <p
+                                  className="text-[11px] font-medium leading-tight"
+                                  style={
+                                    colour ? { color: colour.text } : { color: "#64748b" }
+                                  }
+                                >
+                                  {storeName}
+                                </p>
+                              )}
+                            </>
+                          )}
+                          {shift.absence_type && (
+                            <span
+                              className={cn(
+                                "mt-0.5 inline-block rounded px-1 py-0.5 text-[9px] font-bold uppercase",
+                                ABSENCE_STYLE[shift.absence_type],
+                              )}
+                            >
+                              {ABSENCE_LABEL[shift.absence_type]}
+                              {getShiftAbsenceHours(shift) > 0 &&
+                                ` ${fmt(getShiftAbsenceHours(shift))}`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Days grid — sm and up, unchanged */}
+                <div className="hidden grid-cols-7 divide-x text-center text-[11px] sm:grid">
                   {weekDays.map((day, i) => {
                     const dateKey = weekDates[i];
                     const shift = shiftFor(user.email, dateKey);

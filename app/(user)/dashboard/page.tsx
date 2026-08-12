@@ -329,38 +329,53 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="rounded-lg  p-3 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+      {/* Quick Stats.
+          Three across on phones rather than stacked full-width: as separate
+          rows these ran ~240px each and pushed "Submit Your Availability" —
+          the reason students open the app — off the first screen. The icon and
+          the longer labels are desktop-only for the same reason. */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Card className="py-3 sm:py-6">
+          <CardContent className="flex flex-col items-center gap-0 px-2 text-center sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:pt-6 sm:text-left">
+            <div className="hidden rounded-lg p-3 text-orange-600 sm:block dark:bg-orange-900/30 dark:text-orange-400">
               <Clock className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{pendingWeeks.length}</p>
-              <p className="text-sm text-muted-foreground">Weeks pending</p>
+              <p className="text-xl font-bold sm:text-2xl">{pendingWeeks.length}</p>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                <span className="sm:hidden">Pending</span>
+                <span className="hidden sm:inline">Weeks pending</span>
+              </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="rounded-lg p-3 text-green-600 dark:bg-green-900/30 dark:text-green-400">
+        <Card className="py-3 sm:py-6">
+          <CardContent className="flex flex-col items-center gap-0 px-2 text-center sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:pt-6 sm:text-left">
+            <div className="hidden rounded-lg p-3 text-green-600 sm:block dark:bg-green-900/30 dark:text-green-400">
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{completedWeeks.length}</p>
-              <p className="text-sm text-muted-foreground">Weeks submitted</p>
+              <p className="text-xl font-bold sm:text-2xl">{completedWeeks.length}</p>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                <span className="sm:hidden">Submitted</span>
+                <span className="hidden sm:inline">Weeks submitted</span>
+              </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="rounded-lg p-3 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+        <Card className="py-3 sm:py-6">
+          <CardContent className="flex flex-col items-center gap-0 px-2 text-center sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:pt-6 sm:text-left">
+            <div className="hidden rounded-lg p-3 text-blue-600 sm:block dark:bg-blue-900/30 dark:text-blue-400">
               <CalendarDays className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{activeWeeks.length + completedWeeks.length}</p>
-              <p className="text-sm text-muted-foreground">Total requests</p>
+              <p className="text-xl font-bold sm:text-2xl">
+                {activeWeeks.length + completedWeeks.length}
+              </p>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                <span className="sm:hidden">Total</span>
+                <span className="hidden sm:inline">Total requests</span>
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -398,19 +413,24 @@ export default function Dashboard() {
                   <div className="space-y-4">
                     {/* Availability Summary */}
                     <div className="rounded-lg border bg-muted/30 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-medium">Current Availability</h4>{" "}
-                        <div className="text-sm text-muted-foreground">
-                          {weekHours[week.id]
-                            ? `${weekHours[week.id]} hours desired`
-                            : "No hours set"}
-                        </div>{" "}
+                      {/* Label and hours are grouped so the row can wrap as a
+                          unit on narrow screens; without this the hours text
+                          wraps mid-phrase and collides with the button. */}
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="font-medium">Current Availability</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {weekHours[week.id]
+                              ? `${weekHours[week.id]} hours desired`
+                              : "No hours set"}
+                          </p>
+                        </div>
                         <Dialog
                           open={editingWeek === week.id}
                           onOpenChange={(open) => setEditingWeek(open ? week.id : null)}
                         >
                           <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-0">
                               Edit Schedule
                             </Button>
                           </DialogTrigger>
@@ -515,7 +535,10 @@ export default function Dashboard() {
                                           setWeekHours((prev) => ({ ...prev, [week.id]: hours }))
                                         }
                                         className={cn(
-                                          "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                                          // min-h/min-w keep this a reachable touch
+                                          // target on phones; it rendered 24px tall,
+                                          // under the 44px platform minimum.
+                                          "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:min-h-0 sm:min-w-0 sm:px-3 sm:py-1 sm:text-xs",
                                           weekHours[week.id] === hours
                                             ? "bg-primary text-primary-foreground"
                                             : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground",
@@ -553,6 +576,7 @@ export default function Dashboard() {
                               <div className="grid gap-1.5">
                                 <Button
                                   size="sm"
+                                  className="min-h-11 sm:min-h-0"
                                   onClick={() => handleSubmitAvailability(week.id)}
                                   disabled={submitting === week.id}
                                 >
@@ -568,6 +592,7 @@ export default function Dashboard() {
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  className="min-h-11 sm:min-h-0"
                                   onClick={() => setEditingWeek(null)}
                                 >
                                   Cancel
@@ -664,14 +689,18 @@ export default function Dashboard() {
                       <CardContent className="p-0">
                         <button
                           onClick={() => toggleWeekExpansion(week.week_id)}
-                          className="w-full p-6 text-left  rounded-lg"
+                          className="w-full rounded-lg p-4 text-left sm:p-6"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600">
+                          {/* Stacks on phones: as a single justify-between row the
+                              summary text could not shrink, so it collapsed into a
+                              narrow column while the badges overflowed the card.
+                              min-w-0 is what actually lets the text wrap normally. */}
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="shrink-0 rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 p-2 text-green-600">
                                 <CheckCircle2 className="h-5 w-5" />
                               </div>
-                              <div>
+                              <div className="min-w-0">
                                 <p className="font-medium text-lg">Week {week.week_number}</p>
                                 <p className="text-sm text-muted-foreground">
                                   {availableDaysCount} day{availableDaysCount !== 1 ? "s" : ""}{" "}
@@ -681,7 +710,7 @@ export default function Dashboard() {
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
                               <span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
                                 Submitted
                               </span>
@@ -692,9 +721,9 @@ export default function Dashboard() {
                                 </span>
                               )}
                               {isExpanded ? (
-                                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                                <ChevronUp className="ml-auto h-5 w-5 shrink-0 text-muted-foreground sm:ml-0" />
                               ) : (
-                                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                                <ChevronDown className="ml-auto h-5 w-5 shrink-0 text-muted-foreground sm:ml-0" />
                               )}
                             </div>
                           </div>
@@ -882,7 +911,10 @@ export default function Dashboard() {
                           }))
                         }
                         className={cn(
-                          "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                          // min-h/min-w keep this a reachable touch target on
+                          // phones; it rendered 24px tall, well under the 44px
+                          // platform minimum.
+                          "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:min-h-0 sm:min-w-0 sm:px-3 sm:py-1 sm:text-xs",
                           weekHours[editingSubmittedWeek.week_id] === hours
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground",
