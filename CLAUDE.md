@@ -28,7 +28,10 @@ Required in `.env.local`:
 | `APP_REGION`                            | Region name used to filter stores (e.g. `"Bruxelles"`)                                               |
 | `GEMINI_API_KEY`                        | Google Gemini API key for AI schedule generation                                                     |
 | <!--                                    | `PLANNER_BETA_EMAILS`                                                                                | Comma-separated email allowlist for beta access | --> |
-| `DEVELOPER_EMAILS`                      | Comma-separated email allowlist for `/admin/support` ticket triage. Fails closed: unset means nobody |
+| `DEVELOPER_EMAILS`                      | Comma-separated email allowlist for `/admin/support` ticket triage, and the recipients of new-ticket emails. Fails closed: unset means nobody |
+| `RESEND_API_KEY`                        | Resend API key for new-ticket email notifications (server-only). Unset disables sending |
+| `SUPPORT_FROM_EMAIL`                    | From-address for those emails, on a Resend-verified domain |
+| `APP_URL`                               | Optional. Absolute base URL used for links inside emails. Falls back to `VERCEL_PROJECT_PRODUCTION_URL`, then `http://localhost:3000` |
 
 ## Architecture
 

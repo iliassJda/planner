@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import {
 	getCurrentUser,
@@ -7,6 +8,7 @@ import {
 	requireUser,
 	requireSupportAdmin,
 } from "@/lib/auth-guards";
+import { notifyNewTicket } from "@/lib/notify";
 import type { RoleName, Ticket, TriageTicket, TicketCategory, TicketStatus } from "@/types";
 
 const CATEGORIES: TicketCategory[] = ["bug", "feedback", "question"];
@@ -65,17 +67,38 @@ export async function createTicket(input: CreateTicketInput): Promise<CreateTick
 		return { ok: false, error: `Please keep it under ${MESSAGE_MAX} characters.` };
 	}
 
-	const { error } = await supabaseAdmin.from("tickets").insert({
-		email,
-		author_role: role,
-		category: input.category,
-		message,
-	});
+	const { data, error } = await supabaseAdmin
+		.from("tickets")
+		.insert({
+			email,
+			author_role: role,
+			category: input.category,
+			message,
+		})
+		.select("id")
+		.single();
 
 	if (error) {
 		console.error("Error creating ticket:", error);
 		return { ok: false, error: "Could not submit your report. Please try again." };
 	}
+
+	// Runs after the response is sent, so the reporter never waits on Resend and
+	// never sees an error originating from it. A bare un-awaited promise risks
+	// being killed when the serverless function returns.
+	after(async () => {
+		try {
+			await notifyNewTicket({
+				ticketId: data.id,
+				email,
+				role,
+				category: input.category,
+				message,
+			});
+		} catch (e) {
+			console.error("Ticket notification failed:", e);
+		}
+	});
 
 	return { ok: true };
 }
