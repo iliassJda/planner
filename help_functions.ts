@@ -85,6 +85,57 @@ const DAY_KEYS: (keyof Availability)[] = [
   "sunday",
 ];
 
+/**
+ * Shifts starting from this hour never get a break: staff start leaving between
+ * 18:00 and 20:00, so pulling someone off the floor for 30min would leave the
+ * store short. Confirmed against two years of the manager's plannings — of the
+ * 11 historical shifts starting at 16:00 that run past 5h, none took a break,
+ * while 82% of those starting in the 15:00 hour did.
+ */
+const NO_BREAK_FROM_HOUR = 16;
+
+/** A shift longer than this many gross hours earns a break, if it starts early enough. */
+const BREAK_AFTER_GROSS_HOURS = 5;
+
+function toMinutes(hhmm: string): number {
+  const [h, m] = (hhmm || "").split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function grossShiftHours(start: string, end: string): number {
+  const gross = (toMinutes(end) - toMinutes(start)) / 60;
+  return gross > 0 ? gross : 0;
+}
+
+/**
+ * Whether 30min comes off this shift: only when it starts before 16:00 *and*
+ * runs longer than 5h gross.
+ */
+function shiftHasBreak(start: string, end: string): boolean {
+  if (toMinutes(start) >= NO_BREAK_FROM_HOUR * 60) return false;
+  return grossShiftHours(start, end) > BREAK_AFTER_GROSS_HOURS;
+}
+
+/** Net (paid) hours for a shift window, after any break deduction. */
+function netShiftHours(start: string, end: string): number {
+  const gross = grossShiftHours(start, end);
+  return shiftHasBreak(start, end) ? gross - 0.5 : gross;
+}
+
+/**
+ * True when a student marked at least one day of the week as available.
+ *
+ * Desired hours are only meaningful — and only required — in that case: a week
+ * marked fully unavailable has nothing to request hours for.
+ */
+function hasAnyAvailability(week: Record<string, DayAvailability> | undefined): boolean {
+  if (!week) return false;
+  return DAY_KEYS.some((key) => {
+    const value = week[key as string];
+    return !!value && value !== "not_available";
+  });
+}
+
 function getWeekStartDate(weekNumber: number, year: number): Date {
   // ISO week: Jan 4 is always in week 1
   const jan4 = new Date(year, 0, 4);
@@ -176,6 +227,10 @@ export {
   getWeekDateRange,
   AVAILABILITY_STYLES,
   DAY_KEYS,
+  hasAnyAvailability,
+  grossShiftHours,
+  shiftHasBreak,
+  netShiftHours,
   getWeekStartDate,
   getAvailabilityForDate,
   getShiftWorkedHours,

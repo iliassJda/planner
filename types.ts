@@ -31,6 +31,12 @@ type Week = {
 
 type AbsenceType = "sick" | "vacation" | "recup";
 
+/**
+ * Where a shift came from. Lets model output be told apart from the manager's own
+ * scheduling if this table is ever mined for real staffing patterns.
+ */
+type ShiftSource = "manual" | "ai" | "ai_edited";
+
 type Shift = {
 	id: number;
 	store_id: number | null;
@@ -42,6 +48,7 @@ type Shift = {
 	custom_store_name?: string | null;
 	absence_type?: AbsenceType | null;
 	absence_hours?: number | null;
+	source?: ShiftSource;
 };
 
 type ShiftAssignment = {
@@ -52,6 +59,7 @@ type ShiftAssignment = {
 	customStoreName?: string;
 	absenceType?: AbsenceType;
 	absenceHours?: number;
+	source?: ShiftSource;
 };
 
 type DayAvailability = "not_available" | "morning" | "afternoon" | "whole_day";
@@ -125,6 +133,7 @@ export type {
 	ShiftAssignment,
 	Shift,
 	AbsenceType,
+	ShiftSource,
 	TimetableEntry,
 	Ticket,
 	TriageTicket,

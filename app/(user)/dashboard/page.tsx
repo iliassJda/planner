@@ -39,7 +39,7 @@ import {
   getMyAvailability,
 } from "@/action/supabase";
 // import { useRouter } from "next/navigation";
-import { getWeekDateRange, getWeekStartDate } from "@/help_functions";
+import { getWeekDateRange, getWeekStartDate, hasAnyAvailability } from "@/help_functions";
 import { format, addDays } from "date-fns";
 
 import { getInitials } from "@/help_functions";
@@ -156,7 +156,19 @@ export default function Dashboard() {
     }));
   };
 
+  // Desired hours are required only when the student is actually available for at
+  // least one day: a 0 on an otherwise-available week reaches the planner as
+  // "wants zero hours" and quietly drops them from the schedule. A fully
+  // unavailable week has nothing to request hours for, so it submits as-is.
+  const needsDesiredHours = (weekId: string) => hasAnyAvailability(availabilities[weekId]);
+  const canSubmitWeek = (weekId: string) =>
+    !needsDesiredHours(weekId) || (weekHours[weekId] || 0) > 0;
+
   const handleSubmitAvailability = async (weekId: string) => {
+    if (!canSubmitWeek(weekId)) {
+      toast.error("Please enter how many hours you'd like to work this week.");
+      return;
+    }
     setSubmitting(weekId);
     try {
       const weekAvailability = availabilities[weekId] || {};
@@ -223,6 +235,11 @@ export default function Dashboard() {
     if (!isWeekActive(editingSubmittedWeek.week_id)) {
       toast.error("This week has been closed and can no longer be edited.");
       setEditingSubmittedWeek(null);
+      return;
+    }
+
+    if (!canSubmitWeek(editingSubmittedWeek.week_id)) {
+      toast.error("Please enter how many hours you'd like to work this week.");
       return;
     }
 
@@ -507,6 +524,9 @@ export default function Dashboard() {
                                 <div className="space-y-3">
                                   <label className="block text-sm font-medium text-muted-foreground">
                                     How many hours would you like to work this week?
+                                    {needsDesiredHours(week.id) && (
+                                      <span className="text-destructive"> *</span>
+                                    )}
                                   </label>
                                   <div className="flex items-center gap-3">
                                     <input
@@ -548,6 +568,13 @@ export default function Dashboard() {
                                       </button>
                                     ))}
                                   </div>
+                                  {needsDesiredHours(week.id) &&
+                                    !((weekHours[week.id] || 0) > 0) && (
+                                      <p className="text-xs text-destructive">
+                                        Required - If you don&apos;t want to work this week, mark
+                                        every day as unavailable instead.
+                                      </p>
+                                    )}
                                 </div>
                               </div>
                               <div className="border rounded-lg p-4 bg-card">
@@ -578,7 +605,7 @@ export default function Dashboard() {
                                   size="sm"
                                   className="min-h-11 sm:min-h-0"
                                   onClick={() => handleSubmitAvailability(week.id)}
-                                  disabled={submitting === week.id}
+                                  disabled={submitting === week.id || !canSubmitWeek(week.id)}
                                 >
                                   {submitting === week.id ? (
                                     "Submitting..."
@@ -826,7 +853,12 @@ export default function Dashboard() {
                       <span className="text-primary">{DAY_LABELS[index]}</span>
                       <span className="text-muted-foreground text-base font-normal">
                         ({day.charAt(0).toUpperCase() + day.slice(1)} ·{" "}
-                        {getDayDate(editingSubmittedWeek.week_number, editingSubmittedWeek.year, index)})
+                        {getDayDate(
+                          editingSubmittedWeek.week_number,
+                          editingSubmittedWeek.year,
+                          index,
+                        )}
+                        )
                       </span>
                     </h4>
                     <div className="grid gap-2">
@@ -880,6 +912,9 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   <label className="block text-sm font-medium text-muted-foreground">
                     How many hours would you like to work this week?
+                    {needsDesiredHours(editingSubmittedWeek.week_id) && (
+                      <span className="text-destructive"> *</span>
+                    )}
                   </label>
                   <div className="flex items-center gap-3">
                     <input
@@ -924,6 +959,13 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
+                  {needsDesiredHours(editingSubmittedWeek.week_id) &&
+                    !((weekHours[editingSubmittedWeek.week_id] || 0) > 0) && (
+                      <p className="text-xs text-destructive">
+                        Required — enter at least 1 hour. If you don&apos;t want to work this week,
+                        mark every day as unavailable instead.
+                      </p>
+                    )}
                 </div>
               </div>
               <div className="border rounded-lg p-4 bg-card">
@@ -953,7 +995,10 @@ export default function Dashboard() {
                 <Button
                   size="sm"
                   onClick={handleUpdateAvailability}
-                  disabled={submitting === editingSubmittedWeek.week_id}
+                  disabled={
+                    submitting === editingSubmittedWeek.week_id ||
+                    !canSubmitWeek(editingSubmittedWeek.week_id)
+                  }
                 >
                   {submitting === editingSubmittedWeek.week_id ? (
                     "Updating..."

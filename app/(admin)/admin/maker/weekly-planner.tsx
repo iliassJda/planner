@@ -73,6 +73,7 @@ import {
 	getWeekStartDate,
 	getShiftWorkedHours,
 	getShiftAbsenceHours,
+	shiftHasBreak,
 } from "@/help_functions";
 import { exportWeekToExcel } from "@/lib/export-excel";
 import { generatePlanning } from "@/action/generate-planning";
@@ -408,7 +409,7 @@ export default function WeeklyPlanner() {
 			const gross = shiftHours(existing.start_time, existing.end_time);
 			setHasBreak(Math.abs(gross - existing.hours - 0.5) < 0.01);
 		} else {
-			setHasBreak(shiftHours(start, end) >= 6);
+			setHasBreak(shiftHasBreak(start, end));
 		}
 		if (otherStore && existing?.store_id === otherStore.id) {
 			setOtherStoreName(existing.custom_store_name ?? "");
@@ -444,11 +445,20 @@ export default function WeeklyPlanner() {
 			const idx = prev.findIndex((s) => s.email === email && s.shift_date === dayKey);
 			if (idx !== -1) {
 				const next = [...prev];
-				next[idx] = { ...next[idx], ...newShiftData };
+				// Editing a generated shift by hand makes it a hybrid, not the model's own.
+				const prevSource = next[idx].source;
+				next[idx] = {
+					...next[idx],
+					...newShiftData,
+					source: prevSource === "ai" || prevSource === "ai_edited" ? "ai_edited" : "manual",
+				};
 				return next;
 			}
 			const tempId = Math.min(...prev.map((s) => s.id), 0) - 1;
-			return [...prev, { id: tempId, email, shift_date: dayKey, ...newShiftData }];
+			return [
+				...prev,
+				{ id: tempId, email, shift_date: dayKey, ...newShiftData, source: "manual" as const },
+			];
 		});
 		setIsDirty(true);
 		setDialogOpen(false);
@@ -488,6 +498,7 @@ export default function WeeklyPlanner() {
 					customStoreName: s.custom_store_name ?? undefined,
 					absenceType: s.absence_type ?? undefined,
 					absenceHours: s.absence_hours ?? undefined,
+					source: s.source ?? "manual",
 				};
 			});
 			await insertShift(nested);
@@ -603,6 +614,9 @@ export default function WeeklyPlanner() {
 			setAiDialogOpen(false);
 			setAiNote("");
 			toast.success(`Generated ${result.shifts.length} shifts — review and save when ready`);
+			if (result.warnings?.length) {
+				toast.warning(result.warnings.join("\n"), { duration: 10000 });
+			}
 		} catch {
 			toast.error("Failed to generate planning. Please try again.");
 		} finally {

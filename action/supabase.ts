@@ -244,6 +244,7 @@ function fromRecordToShifts(shifts: Record<string, Record<string, ShiftAssignmen
         custom_store_name: shift.customStoreName ?? null,
         absence_type: shift.absenceType ?? null,
         absence_hours: shift.absenceHours ?? null,
+        source: shift.source ?? "manual",
       } as Shift);
     }
   }
