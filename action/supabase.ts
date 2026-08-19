@@ -3,6 +3,7 @@
 import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { getCurrentUser, requireUser, requireAdmin } from "@/lib/auth-guards";
+import { startOfQuotaDay, nextQuotaReset } from "@/help_functions";
 
 // Role validation moved to lib/auth-guards.ts alongside session resolution.
 
@@ -837,6 +838,83 @@ async function getIcalToken() {
   return data?.ical_token ?? null;
 }
 
+/**
+ * Gemini exposes no endpoint for remaining quota, so usage is counted here. The
+ * limit is whatever the account's plan allows — override with GEMINI_DAILY_LIMIT
+ * when the tier changes rather than editing this default.
+ */
+function dailyGenerationLimit(): number {
+  const parsed = Number(process.env.GEMINI_DAILY_LIMIT);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+}
+
+/**
+ * Record one generation attempt that reached the provider.
+ *
+ * Never throws: a failure to write the audit row must not turn a working
+ * generation into an error for the admin. Logging failures go to the server log.
+ */
+async function logAiGeneration(entry: {
+  weekId?: string | null;
+  model: string;
+  outcome: "success" | "error" | "rate_limited";
+  shiftsKept?: number | null;
+  durationMs?: number | null;
+  error?: string | null;
+}) {
+  try {
+    const user = await getCurrentUser();
+    const { error } = await supabaseAdmin.from("ai_generation_log").insert({
+      email: user?.email ?? null,
+      week_id: entry.weekId ?? null,
+      model: entry.model,
+      outcome: entry.outcome,
+      shifts_kept: entry.shiftsKept ?? null,
+      duration_ms: entry.durationMs ?? null,
+      // Keep the log row small; the full message is already in the server log.
+      error: entry.error ? entry.error.slice(0, 500) : null,
+    });
+    if (error) console.error("Could not log AI generation:", error.message);
+  } catch (e) {
+    console.error("Could not log AI generation:", e);
+  }
+}
+
+/**
+ * How many generation requests have been spent in the current quota day.
+ *
+ * Counts every attempt that reached the provider, including failures — a failed
+ * call may still have consumed quota, so over-counting is the safe direction.
+ */
+async function getAiUsageToday(): Promise<{
+  used: number;
+  limit: number;
+  remaining: number;
+  resetsAt: string;
+}> {
+  await requireAdmin();
+  const limit = dailyGenerationLimit();
+  const since = startOfQuotaDay().toISOString();
+
+  const { count, error } = await supabaseAdmin
+    .from("ai_generation_log")
+    .select("*", { count: "exact", head: true })
+    .gte("created_at", since);
+
+  if (error) {
+    console.error("Could not read AI usage:", error.message);
+    return { used: 0, limit, remaining: limit, resetsAt: nextQuotaReset().toISOString() };
+  }
+
+  const used = count ?? 0;
+  return {
+    used,
+    limit,
+    remaining: Math.max(0, limit - used),
+    resetsAt: nextQuotaReset().toISOString(),
+  };
+}
+
 export {
   getAllowData,
   getTotalStudents,
@@ -871,4 +949,6 @@ export {
   saveTimetable,
   getTimetablesForUsers,
   getIcalToken,
+  logAiGeneration,
+  getAiUsageToday,
 };

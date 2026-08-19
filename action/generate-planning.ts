@@ -1,8 +1,9 @@
 "use server";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import type { Store, Shift } from "@/types";
 import { netShiftHours } from "@/help_functions";
+import { logAiGeneration } from "@/action/supabase";
 
 type TimetableEntry = {
   day_of_week: number; // 0 = Mon, 6 = Sun
@@ -52,6 +53,29 @@ const STORE_COVERAGE: Record<string, number> = {
   Atelier: 1.4,
 };
 const DEFAULT_COVERAGE = 2;
+
+const MODEL = "gemini-2.5-flash";
+
+/**
+ * Ceiling on the model's internal reasoning tokens. 0 disables thinking; null
+ * leaves the model to decide.
+ *
+ * Benchmarked on real week-26 data, 5 samples per setting. Letting the model
+ * decide burned 32,569 thinking tokens against 7,161 of actual output — 82% of
+ * the work was deliberation — and took 270s, leaving barely any margin under the
+ * 300s maxDuration on this route. Disabling it runs in ~30s with *better*
+ * adherence: it hit Alexandra's 19h contract in 4 of 5 runs versus 1 of 5 at a
+ * 512 budget, and produced fewer shifts the validator had to discard.
+ *
+ * That holds because the reasoning is already done for it — the prompt supplies
+ * measured shift windows, per-store headcount, the weekday demand curve and each
+ * fix employee's remaining contract hours. Re-measure if the prompt ever goes
+ * back to being open-ended.
+ *
+ * Note the guard below tests `!= null`, not truthiness: 0 is falsy, and a
+ * truthiness check would silently send no thinkingConfig at all.
+ */
+const THINKING_BUDGET: number | null = 0;
 
 /** Shifts starting at or after this count as afternoon. */
 const AFTERNOON_CUTOFF_MIN = 14 * 60;
@@ -245,9 +269,7 @@ function validateShifts(
   for (const [email, total] of totals) {
     const student = studentByEmail.get(email);
     if (student && total > student.desiredHours) {
-      warnings.push(
-        `${student.name}: ${total}h scheduled but ${student.desiredHours}h requested`,
-      );
+      warnings.push(`${student.name}: ${total}h scheduled but ${student.desiredHours}h requested`);
       continue;
     }
     // Fix employees should land ON their contract, not merely under it — flexible
@@ -256,9 +278,7 @@ function validateShifts(
     const fix = fixByEmail.get(email);
     if (fix?.contract_hours != null && Math.abs(total - fix.contract_hours) > 0.5) {
       const dir = total > fix.contract_hours ? "over" : "under";
-      warnings.push(
-        `${fix.name}: ${total}h scheduled, ${dir} the ${fix.contract_hours}h contract`,
-      );
+      warnings.push(`${fix.name}: ${total}h scheduled, ${dir} the ${fix.contract_hours}h contract`);
     }
   }
 
@@ -271,20 +291,21 @@ export async function generatePlanning({
   studentAvailabilities,
   weekDayKeys,
   managerNote,
+  weekId,
 }: {
   stores: Store[];
   fixUsers: FixUser[];
   studentAvailabilities: StudentAvailability[];
   weekDayKeys: string[];
   managerNote: string;
+  weekId?: string;
 }): Promise<{ shifts: Shift[]; error?: string; warnings?: string[] }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return { shifts: [], error: "GEMINI_API_KEY is not configured. Add it to .env.local" };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const ai = new GoogleGenAI({ apiKey });
 
   const userMessage = `
 STORES:
@@ -309,27 +330,54 @@ ${managerNote ? `MANAGER NOTE:\n${managerNote}` : "No additional notes from mana
 
 Generate the schedule now.`;
 
+  const startedAt = Date.now();
   try {
-    const result = await model.generateContent({
-      systemInstruction: SYSTEM_PROMPT,
-      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+    const result = await ai.models.generateContent({
+      model: MODEL,
+      contents: userMessage,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        ...(THINKING_BUDGET != null ? { thinkingConfig: { thinkingBudget: THINKING_BUDGET } } : {}),
+      },
     });
 
-    const text = result.response.text();
+    const u = result.usageMetadata;
+    console.log(
+      "[gen] %dms  prompt=%d  thoughts=%d  output=%d  budget=%s",
+      Date.now() - startedAt,
+      u?.promptTokenCount ?? -1,
+      u?.thoughtsTokenCount ?? -1,
+      u?.candidatesTokenCount ?? -1,
+      String(THINKING_BUDGET),
+    );
+
+    const text = result.text ?? "";
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
+      // The request still reached the provider and still cost a unit of quota,
+      // so it has to be logged even though nothing usable came back.
+      await logAiGeneration({
+        weekId,
+        model: MODEL,
+        outcome: "error",
+        durationMs: Date.now() - startedAt,
+        error: "Response contained no JSON array",
+      });
       return { shifts: [], error: "Could not parse response from AI" };
     }
 
     const generated: GeneratedShift[] = JSON.parse(jsonMatch[0]);
 
-    const { kept, warnings } = validateShifts(
-      generated,
-      stores,
-      fixUsers,
-      studentAvailabilities,
-    );
+    const { kept, warnings } = validateShifts(generated, stores, fixUsers, studentAvailabilities);
+
+    await logAiGeneration({
+      weekId,
+      model: MODEL,
+      outcome: "success",
+      shiftsKept: kept.length,
+      durationMs: Date.now() - startedAt,
+    });
 
     const shifts: Shift[] = kept.map((g, i) => ({
       id: -(i + 1),
@@ -347,6 +395,21 @@ Generate the schedule now.`;
     return { shifts, warnings: warnings.length > 0 ? warnings : undefined };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
-    return { shifts: [], error: message };
+    // A 429 means the daily quota is already gone — worth distinguishing in the
+    // log so the counter can explain itself rather than just looking wrong.
+    const rateLimited = /429|RESOURCE_EXHAUSTED|quota/i.test(message);
+    await logAiGeneration({
+      weekId,
+      model: MODEL,
+      outcome: rateLimited ? "rate_limited" : "error",
+      durationMs: Date.now() - startedAt,
+      error: message,
+    });
+    return {
+      shifts: [],
+      error: rateLimited
+        ? "Daily AI request limit reached. It resets at midnight Pacific time."
+        : message,
+    };
   }
 }

@@ -123,6 +123,69 @@ function netShiftHours(start: string, end: string): number {
 }
 
 /**
+ * Gemini's daily request quota resets at midnight Pacific, not local time. A
+ * counter bucketed on the Brussels date would reset nine hours early and report
+ * the wrong number all evening.
+ */
+const QUOTA_TIME_ZONE = "America/Los_Angeles";
+
+/** An instant's wall-clock reading in `timeZone`, encoded as a UTC epoch. */
+function wallClockAsUtc(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour") % 24, // some ICU builds render midnight as hour 24
+    get("minute"),
+    get("second"),
+  );
+}
+
+/**
+ * The UTC instant of the most recent midnight in `timeZone`.
+ *
+ * Converges on the answer instead of applying the offset that happens to be in
+ * force right now: on a DST changeover the offset at midnight differs from the
+ * offset later that day, and using the latter lands an hour into the previous
+ * day. Each pass re-reads the offset at the candidate instant, so two are enough.
+ */
+function startOfQuotaDay(now: Date = new Date(), timeZone: string = QUOTA_TIME_ZONE): Date {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const targetMidnight = Math.floor(wallClockAsUtc(now, timeZone) / dayMs) * dayMs;
+
+  let instant = targetMidnight;
+  for (let i = 0; i < 3; i++) {
+    const drift = wallClockAsUtc(new Date(instant), timeZone) - targetMidnight;
+    if (drift === 0) break;
+    instant -= drift;
+  }
+  return new Date(instant);
+}
+
+/**
+ * When the quota next resets — the next midnight in `timeZone`.
+ *
+ * Not simply "+24h": a DST changeover makes the day 23 or 25 hours long, so we
+ * step well into the following day and floor back to its midnight.
+ */
+function nextQuotaReset(now: Date = new Date(), timeZone: string = QUOTA_TIME_ZONE): Date {
+  const start = startOfQuotaDay(now, timeZone);
+  const wellIntoNextDay = new Date(start.getTime() + 36 * 60 * 60 * 1000);
+  return startOfQuotaDay(wellIntoNextDay, timeZone);
+}
+
+/**
  * True when a student marked at least one day of the week as available.
  *
  * Desired hours are only meaningful — and only required — in that case: a week
@@ -228,6 +291,9 @@ export {
   AVAILABILITY_STYLES,
   DAY_KEYS,
   hasAnyAvailability,
+  QUOTA_TIME_ZONE,
+  startOfQuotaDay,
+  nextQuotaReset,
   grossShiftHours,
   shiftHasBreak,
   netShiftHours,
