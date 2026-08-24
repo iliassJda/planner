@@ -4,6 +4,7 @@ import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { getStoresForApp } from "@/action/supabase";
 import { verifyIcalToken, getUpcomingShiftsForUser } from "@/lib/ical-data";
+import { isOtherStore } from "@/help_functions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 
   const [shifts, stores] = await Promise.all([getUpcomingShiftsForUser(email), getStoresForApp()]);
 
-  const otherStore = stores.find((s) => s.name.toLowerCase().includes("other")) ?? null;
+  const otherStore = stores.find(isOtherStore) ?? null;
 
   const calendar = ical({ name: "Neuhaus Planning" });
 

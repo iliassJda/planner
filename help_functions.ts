@@ -271,6 +271,14 @@ function getAvailabilityForDate(
   return results;
 }
 
+/**
+ * The catch-all store an admin pairs with a free-text `custom_store_name`.
+ * Only a human can supply that name, so nothing automated should assign it.
+ */
+function isOtherStore(store: { name: string }) {
+  return store.name.toLowerCase().includes("other");
+}
+
 /** Coarse "3h ago" style relative timestamp for feeds. */
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -285,6 +293,7 @@ function timeAgo(dateStr: string) {
 
 export {
   getInitials,
+  isOtherStore,
   timeAgo,
   convertToCSV,
   getWeekDateRange,

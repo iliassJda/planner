@@ -2,7 +2,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { Store, Shift } from "@/types";
-import { netShiftHours } from "@/help_functions";
+import { isOtherStore, netShiftHours } from "@/help_functions";
 import { logAiGeneration } from "@/action/supabase";
 
 type TimetableEntry = {
@@ -131,6 +131,8 @@ Rules:
    (no break), 16:00–21:00 = 5h net, 10:00–15:00 = 5h net.
    The "hours" field you return must be NET hours.
 8. Distribute students across stores fairly — avoid putting everyone in one store.
+   Use ONLY the store ids listed under STORES. Never invent an id, and never fall back
+   to some other store: if a store is not listed, it is not available this week.
 9. The manager's note takes priority over general rules when there's a conflict.
 
 Return a JSON array of shift objects. Each object must have exactly these fields:
@@ -307,9 +309,15 @@ export async function generatePlanning({
 
   const ai = new GoogleGenAI({ apiKey });
 
+  // The "Other" store only means anything next to a free-text custom_store_name that an
+  // admin types by hand, so the model must never pick it. Dropping it from the input
+  // here — rather than filtering its shifts out afterwards — leaves it no id to choose
+  // and nothing to discard.
+  const schedulableStores = stores.filter((s) => !isOtherStore(s));
+
   const userMessage = `
 STORES:
-${stores.map(formatStore).join("\n")}
+${schedulableStores.map(formatStore).join("\n")}
 
 FIX EMPLOYEES (permanent staff — follow timetable exactly):
 ${fixUsers.map((u) => formatFixUser(u, weekDayKeys)).join("\n")}
@@ -369,7 +377,12 @@ Generate the schedule now.`;
 
     const generated: GeneratedShift[] = JSON.parse(jsonMatch[0]);
 
-    const { kept, warnings } = validateShifts(generated, stores, fixUsers, studentAvailabilities);
+    const { kept, warnings } = validateShifts(
+      generated,
+      schedulableStores,
+      fixUsers,
+      studentAvailabilities,
+    );
 
     await logAiGeneration({
       weekId,
