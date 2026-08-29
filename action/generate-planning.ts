@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import type { Store, Shift } from "@/types";
 import { isOtherStore, netShiftHours } from "@/help_functions";
 import { logAiGeneration } from "@/action/supabase";
+import { requireAdmin } from "@/lib/auth-guards";
 
 type TimetableEntry = {
   day_of_week: number; // 0 = Mon, 6 = Sun
@@ -302,6 +303,7 @@ export async function generatePlanning({
   managerNote: string;
   weekId?: string;
 }): Promise<{ shifts: Shift[]; error?: string; warnings?: string[] }> {
+  await requireAdmin();
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return { shifts: [], error: "GEMINI_API_KEY is not configured. Add it to .env.local" };
