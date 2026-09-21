@@ -411,42 +411,90 @@ export default function Dashboard() {
             <p className="text-muted-foreground">{formattedDate}</p>
           </div>
         </div>
-        <div className="flex justify-between">
-          <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
-            <Calendar className="h-5 w-5" />
-            <span className="font-medium">Week {getWeekNumber(currentDate)}</span>
-          </div>
-          <button className="ml-4 flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
-            test
-          </button>
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
+          <Calendar className="h-5 w-5" />
+          <span className="font-medium">Week {getWeekNumber(currentDate)}</span>
         </div>
       </div>
 
       {/* Weekly Template */}
       <Card>
-        <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="flex items-center gap-3">
             <div className="rounded-lg bg-muted/50 p-2 text-primary">
               <Repeat className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-medium">Weekly Template</h3>
-              <p className="text-sm text-muted-foreground">
-                {template?.is_enabled
-                  ? "Auto-fill is on — new weeks will be filled in from your template automatically."
-                  : template
-                    ? "Auto-fill is off — your saved template won't be applied to new weeks."
-                    : "Save a recurring pattern to have it applied automatically to new weeks."}
-              </p>
+              <CardTitle className="text-base">Weekly Template</CardTitle>
+              <CardDescription>Auto-fill new weeks from a recurring pattern</CardDescription>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <Switch
-              checked={template?.is_enabled ?? false}
-              disabled={savingTemplate}
-              onCheckedChange={(checked) => handleSaveTemplate(checked)}
-              aria-label="Toggle weekly auto-fill"
-            />
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-3 py-1 text-xs font-medium",
+              template?.is_enabled
+                ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {template?.is_enabled ? "Auto-fill on" : template ? "Auto-fill off" : "Not set up"}
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {template ? (
+            (() => {
+              const savedTemplate = template;
+              return (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {DAYS.map((day, index) => {
+                    const value = savedTemplate[day];
+                    const option =
+                      AVAILABILITY_OPTIONS.find((opt) => opt.value === value) ??
+                      AVAILABILITY_OPTIONS[0];
+                    return (
+                      <div
+                        key={day}
+                        title={`${DAY_LABELS[index]}: ${option.label}`}
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold",
+                          value === "not_available"
+                            ? "border-muted text-muted-foreground"
+                            : `${option.bg} ${option.border} ${option.color}`,
+                        )}
+                      >
+                        {DAY_LABELS[index][0]}
+                      </div>
+                    );
+                  })}
+                  {savedTemplate.hours > 0 && (
+                    <span className="ml-1 text-sm text-muted-foreground">
+                      {savedTemplate.hours}h / week
+                    </span>
+                  )}
+                  {savedTemplate.comment && (
+                    <span className="w-full truncate text-sm text-muted-foreground">
+                      {savedTemplate.comment}
+                    </span>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              If your availability repeats every week, set it up once and new weeks will be filled
+              in for you automatically. You can always review and edit a filled-in week afterwards.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={template?.is_enabled ?? false}
+                disabled={savingTemplate}
+                onCheckedChange={(checked) => handleSaveTemplate(checked)}
+                aria-label="Toggle weekly auto-fill"
+              />
+              <span className="text-sm text-muted-foreground">Auto-fill new weeks</span>
+            </div>
             <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -541,6 +589,32 @@ export default function Dashboard() {
                         />
                         <span className="text-sm text-muted-foreground">hours</span>
                       </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {[10, 20, 30, 40].map((hours) => (
+                          <button
+                            key={hours}
+                            type="button"
+                            onClick={() => setTemplateHours(hours)}
+                            className={cn(
+                              // min-h/min-w keep this a reachable touch
+                              // target on phones; it rendered 24px tall,
+                              // under the 44px platform minimum.
+                              "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors sm:min-h-0 sm:min-w-0 sm:px-3 sm:py-1 sm:text-xs",
+                              templateHours === hours
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {hours}h
+                          </button>
+                        ))}
+                      </div>
+                      {templateHasAnyAvailability() && !(templateHours > 0) && (
+                        <p className="text-xs text-destructive">
+                          Required - If you don&apos;t want to work, mark every day as unavailable
+                          instead.
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="border rounded-lg p-4 bg-card">
@@ -548,28 +622,42 @@ export default function Dashboard() {
                       <MessageSquare className="h-5 w-5" />
                       Additional Comments
                     </h4>
-                    <textarea
-                      value={templateComment}
-                      onChange={(e) => setTemplateComment(e.target.value)}
-                      placeholder="e.g., I'm available mornings only, prefer Tuesday..."
-                      className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
-                      rows={3}
-                    />
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-muted-foreground">
+                        Add any notes or comments about your availability
+                      </label>
+                      <textarea
+                        value={templateComment}
+                        onChange={(e) => setTemplateComment(e.target.value)}
+                        placeholder="e.g., I'm available mornings only, prefer Tuesday..."
+                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                        rows={3}
+                      />
+                    </div>
                   </div>
                   <div className="grid gap-1.5">
                     <Button
                       size="sm"
+                      className="min-h-11 sm:min-h-0"
                       onClick={async () => {
                         await handleSaveTemplate(template?.is_enabled ?? false);
                         setTemplateDialogOpen(false);
                       }}
-                      disabled={savingTemplate}
+                      disabled={savingTemplate || !canSaveTemplate()}
                     >
-                      {savingTemplate ? "Saving..." : "Save Template"}
+                      {savingTemplate ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <Repeat className="mr-2 h-4 w-4" />
+                          Save Template
+                        </>
+                      )}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
+                      className="min-h-11 sm:min-h-0"
                       onClick={() => setTemplateDialogOpen(false)}
                     >
                       Cancel

@@ -73,7 +73,23 @@ async function activateWeek(weekId: string) {
     return null;
   }
 
-  return updatedWeek as Week[];
+  const activatedWeeks = updatedWeek as Week[];
+
+  // A week going active is another way it "opens up" for submissions, same as
+  // being created active in upsertWeeks — so it should get the same auto-fill.
+  const applied = await applyTemplatesToNewWeeks(activatedWeeks);
+
+  after(async () => {
+    for (const { email, week_id, week_label } of applied) {
+      try {
+        await notifyTemplateApplied({ email, weekId: week_id, weekLabel: week_label });
+      } catch (e) {
+        console.error("Template-applied notification failed:", e);
+      }
+    }
+  });
+
+  return activatedWeeks;
 }
 
 /**
@@ -237,33 +253,27 @@ const DAY_KEYS = [
   "sunday",
 ] as const;
 
+type TemplateFillResult = { email: string; week_id: string; week_label: string };
+
 /**
- * Auto-fills availability for newly created weeks from each student's saved
- * template, skipping any (week, student) pair that already has an
- * Availability row. Returns the rows actually inserted so the caller can
- * notify affected students.
+ * Core of the auto-fill: inserts an Availability row from `template` into
+ * `week` for every (week, template) pair that doesn't already have one.
+ * Shared by the "new week was opened" and "template was just enabled" entry
+ * points below so both stay in sync on the skip-if-already-submitted rule.
  */
-async function applyTemplatesToNewWeeks(
+async function fillMissingAvailabilityFromTemplates(
   weeks: Week[],
-): Promise<{ email: string; week_id: string; week_label: string }[]> {
-  if (weeks.length === 0) return [];
-
-  const { data: templates, error: templatesError } = await supabaseAdmin
-    .from("AvailabilityTemplate")
-    .select("*")
-    .eq("is_enabled", true);
-
-  if (templatesError) {
-    console.error("Error fetching availability templates:", templatesError);
-    return [];
-  }
-  if (!templates || templates.length === 0) return [];
+  templates: AvailabilityTemplate[],
+): Promise<TemplateFillResult[]> {
+  if (weeks.length === 0 || templates.length === 0) return [];
 
   const weekIds = weeks.map((w) => w.id);
+  const emails = templates.map((t) => t.email);
   const { data: existingRows, error: existingError } = await supabaseAdmin
     .from("Availability")
     .select("email, week_id")
-    .in("week_id", weekIds);
+    .in("week_id", weekIds)
+    .in("email", emails);
 
   if (existingError) {
     console.error("Error checking existing availability before template fill:", existingError);
@@ -273,10 +283,10 @@ async function applyTemplatesToNewWeeks(
   const existingKeys = new Set((existingRows ?? []).map((r) => `${r.week_id}|${r.email}`));
 
   const rowsToInsert: Availability[] = [];
-  const applied: { email: string; week_id: string; week_label: string }[] = [];
+  const applied: TemplateFillResult[] = [];
 
   for (const week of weeks) {
-    for (const template of templates as AvailabilityTemplate[]) {
+    for (const template of templates) {
       if (existingKeys.has(`${week.id}|${template.email}`)) continue;
 
       rowsToInsert.push({
@@ -311,6 +321,50 @@ async function applyTemplatesToNewWeeks(
   return applied;
 }
 
+/**
+ * Auto-fills the given (newly created or newly activated) weeks from every
+ * enabled template. Called whenever a week becomes open for submissions.
+ */
+async function applyTemplatesToNewWeeks(weeks: Week[]): Promise<TemplateFillResult[]> {
+  if (weeks.length === 0) return [];
+
+  const { data: templates, error: templatesError } = await supabaseAdmin
+    .from("AvailabilityTemplate")
+    .select("*")
+    .eq("is_enabled", true);
+
+  if (templatesError) {
+    console.error("Error fetching availability templates:", templatesError);
+    return [];
+  }
+  if (!templates || templates.length === 0) return [];
+
+  return fillMissingAvailabilityFromTemplates(weeks, templates as AvailabilityTemplate[]);
+}
+
+/**
+ * Catches up a single template against every currently open week — the
+ * mirror image of applyTemplatesToNewWeeks. Called whenever a student enables
+ * (or re-saves while enabled) their template, so pending weeks that predate
+ * the template don't require a new week to be created before they benefit.
+ */
+async function applyTemplateToOpenWeeks(
+  template: AvailabilityTemplate,
+): Promise<TemplateFillResult[]> {
+  const { data: activeWeeks, error: weeksError } = await supabaseAdmin
+    .from("Week")
+    .select("*")
+    .eq("is_active", true);
+
+  if (weeksError) {
+    console.error("Error fetching active weeks for template catch-up fill:", weeksError);
+    return [];
+  }
+  if (!activeWeeks || activeWeeks.length === 0) return [];
+
+  return fillMissingAvailabilityFromTemplates(activeWeeks as Week[], [template]);
+}
+
 async function getMyAvailabilityTemplate() {
   const { email } = await requireUser();
 
@@ -341,6 +395,22 @@ async function saveAvailabilityTemplate(template: AvailabilityTemplate) {
   if (error) {
     console.error("Error saving availability template:", error);
     return null;
+  }
+
+  // Enabling (or re-saving while enabled) catches up every currently open
+  // week that hasn't been submitted yet, not just weeks created afterwards.
+  if (record.is_enabled) {
+    const applied = await applyTemplateToOpenWeeks(record);
+
+    after(async () => {
+      for (const { email: recipient, week_id, week_label } of applied) {
+        try {
+          await notifyTemplateApplied({ email: recipient, weekId: week_id, weekLabel: week_label });
+        } catch (e) {
+          console.error("Template-applied notification failed:", e);
+        }
+      }
+    });
   }
 
   return data as AvailabilityTemplate[];
