@@ -191,7 +191,10 @@ export default function Dashboard() {
         comment: templateComment,
       };
       await saveAvailabilityTemplate(record);
-      await fetchTemplate();
+      // Enabling can retroactively fill already-open weeks (see
+      // applyTemplateToOpenWeeks), so the pending/submitted week lists need
+      // refreshing too, not just the template card itself.
+      await Promise.all([fetchTemplate(), fetchData()]);
       if (!options?.silent) {
         toast.success(enabled ? "Weekly template saved and enabled" : "Weekly template saved");
       }
