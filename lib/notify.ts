@@ -114,3 +114,56 @@ export async function notifyNewTicket(input: NewTicketInput): Promise<void> {
 		console.error("[notify] Could not send ticket notification:", e);
 	}
 }
+
+type TemplateAppliedInput = {
+	email: string;
+	weekId: string;
+	weekLabel: string;
+};
+
+export async function notifyTemplateApplied(input: TemplateAppliedInput): Promise<void> {
+	const apiKey = process.env.RESEND_API_KEY;
+	const from = process.env.SUPPORT_FROM_EMAIL;
+
+	if (!apiKey) {
+		console.warn("[notify] RESEND_API_KEY is not set — skipping template-applied notification.");
+		return;
+	}
+	if (!from) {
+		console.warn(
+			"[notify] SUPPORT_FROM_EMAIL is not set — skipping template-applied notification.",
+		);
+		return;
+	}
+
+	const dashboardUrl = `${appUrl()}/dashboard`;
+
+	const text = [
+		`Your saved availability template was applied to ${input.weekLabel}.`,
+		"",
+		"Review it and make changes if needed:",
+		dashboardUrl,
+	].join("\n");
+
+	const html = [
+		`<p>Your saved availability template was applied to <strong>${escapeHtml(input.weekLabel)}</strong>.</p>`,
+		`<p>Review it and make changes if needed:</p>`,
+		`<p><a href="${dashboardUrl}">Open your dashboard</a></p>`,
+	].join("");
+
+	try {
+		const { error } = await new Resend(apiKey).emails.send({
+			from,
+			to: [input.email],
+			subject: `[Planner] Availability filled in for ${input.weekLabel}`,
+			text,
+			html,
+		});
+
+		if (error) {
+			console.error("[notify] Resend rejected the template-applied notification:", error);
+		}
+	} catch (e) {
+		console.error("[notify] Could not send template-applied notification:", e);
+	}
+}

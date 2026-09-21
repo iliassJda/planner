@@ -19,6 +19,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,8 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Week, Availability, DayAvailability } from "@/types";
+import { Repeat } from "lucide-react";
+import { Week, Availability, AvailabilityTemplate, DayAvailability } from "@/types";
 // import AdminSkeleton from "@/components/admin-skeleton";
 import UserSkeleton from "@/components/user-skeleton";
 import {
@@ -37,6 +39,8 @@ import {
   insertAvailability,
   updateAvailability,
   getMyAvailability,
+  getMyAvailabilityTemplate,
+  saveAvailabilityTemplate,
 } from "@/action/supabase";
 // import { useRouter } from "next/navigation";
 import { getWeekDateRange, getWeekStartDate, hasAnyAvailability } from "@/help_functions";
@@ -111,6 +115,13 @@ export default function Dashboard() {
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
+  const [template, setTemplate] = useState<AvailabilityTemplate | null>(null);
+  const [templateDays, setTemplateDays] = useState<Record<string, DayAvailability>>({});
+  const [templateHours, setTemplateHours] = useState(0);
+  const [templateComment, setTemplateComment] = useState("");
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
   const fetchData = async () => {
     const availabilityData = await getMyAvailability();
     const weeksData = await getAllWeeks();
@@ -125,12 +136,72 @@ export default function Dashboard() {
     setLoading(false);
   };
 
+  const fetchTemplate = async () => {
+    const templateData = await getMyAvailabilityTemplate();
+    setTemplate(templateData);
+    if (templateData) {
+      setTemplateDays({
+        monday: templateData.monday,
+        tuesday: templateData.tuesday,
+        wednesday: templateData.wednesday,
+        thursday: templateData.thursday,
+        friday: templateData.friday,
+        saturday: templateData.saturday,
+        sunday: templateData.sunday,
+      });
+      setTemplateHours(templateData.hours);
+      setTemplateComment(templateData.comment);
+    }
+  };
+
   const isWeekActive = (weekId: string) =>
     allWeeks.find((w) => w.id === weekId)?.is_active !== false;
 
   useEffect(() => {
     fetchData();
+    fetchTemplate();
   }, [user?.email]);
+
+  const handleTemplateDayToggle = (day: string, availability: DayAvailability) => {
+    setTemplateDays((prev) => ({ ...prev, [day]: availability }));
+  };
+
+  const templateHasAnyAvailability = () => hasAnyAvailability(templateDays);
+
+  const canSaveTemplate = () => !templateHasAnyAvailability() || templateHours > 0;
+
+  const handleSaveTemplate = async (enabled: boolean, options?: { silent?: boolean }) => {
+    if (enabled && !canSaveTemplate()) {
+      toast.error("Please set your availability and desired hours before enabling auto-fill.");
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const record: AvailabilityTemplate = {
+        email: user?.email || "",
+        is_enabled: enabled,
+        monday: templateDays.monday || "not_available",
+        tuesday: templateDays.tuesday || "not_available",
+        wednesday: templateDays.wednesday || "not_available",
+        thursday: templateDays.thursday || "not_available",
+        friday: templateDays.friday || "not_available",
+        saturday: templateDays.saturday || "not_available",
+        sunday: templateDays.sunday || "not_available",
+        hours: templateHours,
+        comment: templateComment,
+      };
+      await saveAvailabilityTemplate(record);
+      await fetchTemplate();
+      if (!options?.silent) {
+        toast.success(enabled ? "Weekly template saved and enabled" : "Weekly template saved");
+      }
+    } catch (error) {
+      console.error("Error saving availability template:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
 
   const currentDate = new Date();
   const formattedDate = currentDate.toLocaleDateString("en-US", {
@@ -340,11 +411,176 @@ export default function Dashboard() {
             <p className="text-muted-foreground">{formattedDate}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
-          <Calendar className="h-5 w-5" />
-          <span className="font-medium">Week {getWeekNumber(currentDate)}</span>
+        <div className="flex justify-between">
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
+            <Calendar className="h-5 w-5" />
+            <span className="font-medium">Week {getWeekNumber(currentDate)}</span>
+          </div>
+          <button className="ml-4 flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2">
+            test
+          </button>
         </div>
       </div>
+
+      {/* Weekly Template */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-muted/50 p-2 text-primary">
+              <Repeat className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-medium">Weekly Template</h3>
+              <p className="text-sm text-muted-foreground">
+                {template?.is_enabled
+                  ? "Auto-fill is on — new weeks will be filled in from your template automatically."
+                  : template
+                    ? "Auto-fill is off — your saved template won't be applied to new weeks."
+                    : "Save a recurring pattern to have it applied automatically to new weeks."}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <Switch
+              checked={template?.is_enabled ?? false}
+              disabled={savingTemplate}
+              onCheckedChange={(checked) => handleSaveTemplate(checked)}
+              aria-label="Toggle weekly auto-fill"
+            />
+            <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  {template ? "Edit Template" : "Set Up Template"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Weekly Availability Template</DialogTitle>
+                  <DialogDescription>
+                    This pattern will be copied into every new week that gets created, as long as
+                    auto-fill is enabled. You can always review and edit a filled-in week
+                    afterwards.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  {DAYS.map((day, index) => {
+                    const currentAvailability = templateDays[day] || "not_available";
+                    return (
+                      <div key={day} className="border rounded-lg p-4 bg-card">
+                        <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                          <span className="text-primary">{DAY_LABELS[index]}</span>
+                          <span className="text-muted-foreground text-base font-normal">
+                            ({day.charAt(0).toUpperCase() + day.slice(1)})
+                          </span>
+                        </h4>
+                        <div className="grid gap-2">
+                          {AVAILABILITY_OPTIONS.map((option) => {
+                            const isSelected = currentAvailability === option.value;
+                            const Icon = option.icon;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => handleTemplateDayToggle(day, option.value)}
+                                className={cn(
+                                  "flex items-center gap-3 p-3 rounded-md border-2 transition-all duration-200 hover:shadow-md w-full text-left",
+                                  isSelected
+                                    ? `${option.bg} ${option.border} ring-2 ring-offset-2 ring-current ${option.color} shadow-md`
+                                    : "bg-muted/50 border-muted hover:border-muted-foreground/30",
+                                )}
+                              >
+                                <Icon
+                                  className={cn(
+                                    "h-5 w-5 flex-shrink-0",
+                                    isSelected ? option.color : "text-muted-foreground",
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    "font-medium",
+                                    isSelected ? option.color : "text-muted-foreground",
+                                  )}
+                                >
+                                  {option.label}
+                                </span>
+                                {isSelected && (
+                                  <CheckCircle2 className={cn("h-5 w-5 ml-auto", option.color)} />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="border rounded-lg p-4 bg-card">
+                    <h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
+                      <Clock className="h-5 w-5" />
+                      Desired Hours
+                    </h4>
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-muted-foreground">
+                        How many hours would you like to work in a typical week?
+                        {templateHasAnyAvailability() && (
+                          <span className="text-destructive"> *</span>
+                        )}
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          value={templateHours || ""}
+                          onChange={(e) => {
+                            const value = Math.max(0, Math.min(60, parseInt(e.target.value) || 0));
+                            setTemplateHours(value);
+                          }}
+                          placeholder="0"
+                          className="w-24 px-3 py-2 border rounded-md text-center font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                        <span className="text-sm text-muted-foreground">hours</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border rounded-lg p-4 bg-card">
+                    <h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-primary">
+                      <MessageSquare className="h-5 w-5" />
+                      Additional Comments
+                    </h4>
+                    <textarea
+                      value={templateComment}
+                      onChange={(e) => setTemplateComment(e.target.value)}
+                      placeholder="e.g., I'm available mornings only, prefer Tuesday..."
+                      className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        await handleSaveTemplate(template?.is_enabled ?? false);
+                        setTemplateDialogOpen(false);
+                      }}
+                      disabled={savingTemplate}
+                    >
+                      {savingTemplate ? "Saving..." : "Save Template"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setTemplateDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Stats.
           Three across on phones rather than stacked full-width: as separate
@@ -741,6 +977,12 @@ export default function Dashboard() {
                               <span className="rounded-full dark:bg-green-900 dark:text-green-400 bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
                                 Submitted
                               </span>
+                              {week.from_template && (
+                                <span className="flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-400">
+                                  <Repeat className="h-3 w-3" />
+                                  Auto-filled — review it
+                                </span>
+                              )}
                               {!weekActive && (
                                 <span className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
                                   <Lock className="h-3 w-3" />

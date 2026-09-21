@@ -78,6 +78,21 @@ type Availability = {
 	hours: number;
 	year: number;
 	comment: string;
+	from_template?: boolean;
+};
+
+type AvailabilityTemplate = {
+	email: string;
+	is_enabled: boolean;
+	monday: DayAvailability;
+	tuesday: DayAvailability;
+	wednesday: DayAvailability;
+	thursday: DayAvailability;
+	friday: DayAvailability;
+	saturday: DayAvailability;
+	sunday: DayAvailability;
+	hours: number;
+	comment: string;
 };
 
 type Region = {
@@ -127,6 +142,7 @@ export type {
 	RoleName,
 	Week,
 	Availability,
+	AvailabilityTemplate,
 	DayAvailability,
 	Store,
 	Region,

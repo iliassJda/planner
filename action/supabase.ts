@@ -1,9 +1,20 @@
 "use server";
 
-import { Availability, RoleName, User, Week, Store, ShiftAssignment, Shift } from "@/types";
+import { after } from "next/server";
+import {
+  Availability,
+  AvailabilityTemplate,
+  RoleName,
+  User,
+  Week,
+  Store,
+  ShiftAssignment,
+  Shift,
+} from "@/types";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 import { getCurrentUser, requireUser, requireAdmin } from "@/lib/auth-guards";
 import { startOfQuotaDay, nextQuotaReset } from "@/help_functions";
+import { notifyTemplateApplied } from "@/lib/notify";
 
 // Role validation moved to lib/auth-guards.ts alongside session resolution.
 
@@ -196,7 +207,143 @@ async function upsertWeeks(weeks: Omit<Week, "is_active">[]) {
     return null;
   }
 
-  return data as Week[];
+  const createdWeeks = data as Week[];
+
+  // The admin UI only offers weeks that don't already exist in the DB (see
+  // generateWeeksList filtering in app/(admin)/admin/page.tsx), so every week
+  // reaching this upsert is genuinely new — safe to auto-fill from templates.
+  const applied = await applyTemplatesToNewWeeks(createdWeeks);
+
+  after(async () => {
+    for (const { email, week_id, week_label } of applied) {
+      try {
+        await notifyTemplateApplied({ email, weekId: week_id, weekLabel: week_label });
+      } catch (e) {
+        console.error("Template-applied notification failed:", e);
+      }
+    }
+  });
+
+  return createdWeeks;
+}
+
+const DAY_KEYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+/**
+ * Auto-fills availability for newly created weeks from each student's saved
+ * template, skipping any (week, student) pair that already has an
+ * Availability row. Returns the rows actually inserted so the caller can
+ * notify affected students.
+ */
+async function applyTemplatesToNewWeeks(
+  weeks: Week[],
+): Promise<{ email: string; week_id: string; week_label: string }[]> {
+  if (weeks.length === 0) return [];
+
+  const { data: templates, error: templatesError } = await supabaseAdmin
+    .from("AvailabilityTemplate")
+    .select("*")
+    .eq("is_enabled", true);
+
+  if (templatesError) {
+    console.error("Error fetching availability templates:", templatesError);
+    return [];
+  }
+  if (!templates || templates.length === 0) return [];
+
+  const weekIds = weeks.map((w) => w.id);
+  const { data: existingRows, error: existingError } = await supabaseAdmin
+    .from("Availability")
+    .select("email, week_id")
+    .in("week_id", weekIds);
+
+  if (existingError) {
+    console.error("Error checking existing availability before template fill:", existingError);
+    return [];
+  }
+
+  const existingKeys = new Set((existingRows ?? []).map((r) => `${r.week_id}|${r.email}`));
+
+  const rowsToInsert: Availability[] = [];
+  const applied: { email: string; week_id: string; week_label: string }[] = [];
+
+  for (const week of weeks) {
+    for (const template of templates as AvailabilityTemplate[]) {
+      if (existingKeys.has(`${week.id}|${template.email}`)) continue;
+
+      rowsToInsert.push({
+        email: template.email,
+        week_id: week.id,
+        week_number: week.week_number,
+        year: week.year,
+        monday: template.monday,
+        tuesday: template.tuesday,
+        wednesday: template.wednesday,
+        thursday: template.thursday,
+        friday: template.friday,
+        saturday: template.saturday,
+        sunday: template.sunday,
+        hours: template.hours,
+        comment: template.comment,
+        from_template: true,
+      });
+      applied.push({ email: template.email, week_id: week.id, week_label: week.week_label });
+    }
+  }
+
+  if (rowsToInsert.length === 0) return [];
+
+  const { error: insertError } = await supabaseAdmin.from("Availability").insert(rowsToInsert);
+
+  if (insertError) {
+    console.error("Error auto-filling availability from templates:", insertError);
+    return [];
+  }
+
+  return applied;
+}
+
+async function getMyAvailabilityTemplate() {
+  const { email } = await requireUser();
+
+  const { data, error } = await supabaseAdmin
+    .from("AvailabilityTemplate")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching availability template:", error);
+    return null;
+  }
+
+  return data as AvailabilityTemplate | null;
+}
+
+async function saveAvailabilityTemplate(template: AvailabilityTemplate) {
+  const { email } = await requireUser();
+  // Bind the row to the caller rather than to the client-supplied email.
+  const record: AvailabilityTemplate = { ...template, email };
+
+  const { data, error } = await supabaseAdmin
+    .from("AvailabilityTemplate")
+    .upsert(record, { onConflict: "email" })
+    .select();
+
+  if (error) {
+    console.error("Error saving availability template:", error);
+    return null;
+  }
+
+  return data as AvailabilityTemplate[];
 }
 
 async function isWeekActive(weekId: string): Promise<boolean> {
@@ -293,16 +440,6 @@ async function updateAvailability(availability: Availability) {
   if (!(await isWeekActive(record.week_id))) {
     throw new Error("This week has been closed and can no longer be edited.");
   }
-
-  const DAY_KEYS = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-  ] as const;
 
   // Fetch old availability to compute diff
   const { data: oldRows } = await supabaseAdmin
@@ -951,4 +1088,6 @@ export {
   getIcalToken,
   logAiGeneration,
   getAiUsageToday,
+  getMyAvailabilityTemplate,
+  saveAvailabilityTemplate,
 };
